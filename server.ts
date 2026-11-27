@@ -9,7 +9,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PORT = Number(process.env.PORT || 3000);
-const isProduction = process.env.NODE_ENV === 'production';
+const isDevLifecycle = process.env.npm_lifecycle_event === 'dev';
+const distIndexPath = path.resolve(__dirname, 'dist', 'index.html');
+const isProduction =
+  process.env.NODE_ENV === 'production' ||
+  (!isDevLifecycle && fs.existsSync(distIndexPath));
 
 interface SearchCandidatePayload {
   mallName: string;
