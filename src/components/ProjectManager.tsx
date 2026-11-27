@@ -34,11 +34,13 @@ import {
   getTodayISO,
 } from '../utils/formatters';
 import { ResponsiveSheet } from './ResponsiveSheet';
+import { YouTubeRecommendationPanel } from './YouTubeRecommendationPanel';
 
 export interface ProjectDraftPreset {
   title?: string;
   machineSpec?: string;
   memo?: string;
+  steps?: string[];
 }
 
 interface ProjectManagerProps {
@@ -506,13 +508,15 @@ function ProjectFormSheet({
     editingProject?.memo ?? draftPreset?.memo ?? ''
   );
   const [checklist, setChecklist] = useState<ProjectChecklistItem[]>(
-    editingProject?.checklist ?? createChecklistFromTemplate()
+    editingProject?.checklist ??
+      createChecklistFromTemplate(draftPreset?.steps)
   );
   const [newStepText, setNewStepText] = useState('');
   const [completedImageUrl, setCompletedImageUrl] = useState<string | null>(
     editingProject?.completedImageUrl ?? null
   );
   const [isProcessingImg, setIsProcessingImg] = useState(false);
+  const [showYoutubeHelper, setShowYoutubeHelper] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   const selectedFabric = fabrics.find((f) => f.id === fabricId);
@@ -891,6 +895,32 @@ function ProjectFormSheet({
             placeholder="시접 여유, 패턴 사이즈, 수정할 점 등을 자유롭게 적어두세요."
             className="w-full rounded-xl border border-[#DFDBD2] bg-white p-3.5 text-sm leading-relaxed text-[#262320] placeholder:text-[#9C9488] focus:border-[#2B4157] focus:outline-none"
           />
+        </div>
+
+        {/* 이 작업 관련 유튜브 만들기 영상 자동 추천 */}
+        <div className="space-y-3 border-t border-[#E5E1D8] pt-4">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-[#4A453F]">
+              만들기 참고 유튜브 영상
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowYoutubeHelper((v) => !v)}
+              className="min-h-[36px] cursor-pointer rounded-xl border border-[#DFDBD2] bg-white px-3 text-xs font-medium text-[#2B4157] hover:border-[#2B4157]"
+            >
+              {showYoutubeHelper ? '추천 영상 접기' : '이 작품 유튜브 영상 추천'}
+            </button>
+          </div>
+          {showYoutubeHelper && (
+            <YouTubeRecommendationPanel
+              defaultQuery={title.trim() || '에코백'}
+              heading="유튜브 참고 영상"
+              subtitle=""
+              showSearchInput={true}
+              maxItems={4}
+              autoFetch={true}
+            />
+          )}
         </div>
       </form>
     </ResponsiveSheet>

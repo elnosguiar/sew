@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import {
   ArrowRight,
+  BookOpen,
   Calculator,
   CheckCircle2,
   Clock3,
@@ -25,6 +26,7 @@ interface HomeDashboardProps {
   fabrics: FabricItem[];
   projects: ProjectItem[];
   onNavigate: (tab: TabId) => void;
+  onOpenPatterns: () => void;
   onQuickAddFabric: () => void;
   onQuickAddProject: () => void;
   onAdvanceProjectStatus: (projectId: string) => void;
@@ -37,6 +39,7 @@ export function HomeDashboard({
   fabrics,
   projects,
   onNavigate,
+  onOpenPatterns,
   onQuickAddFabric,
   onQuickAddProject,
   onAdvanceProjectStatus,
@@ -362,14 +365,23 @@ export function HomeDashboard({
       </div>
 
       {/* One-Handed Quick Action Shortcuts (Thumb Zone) */}
-      <section aria-label="빠른 실행" className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+      <section aria-label="빠른 실행" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <button
           type="button"
           onClick={() => onNavigate('compare')}
-          className="col-span-2 flex min-h-[52px] cursor-pointer items-center justify-center gap-2 rounded-2xl border border-[#2B4157]/30 bg-white px-4 py-3 text-sm font-semibold text-[#2B4157] transition-colors hover:border-[#2B4157] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#2B4157] sm:col-span-1"
+          className="flex min-h-[52px] cursor-pointer items-center justify-center gap-2 rounded-2xl border border-[#2B4157]/30 bg-white px-4 py-3 text-sm font-semibold text-[#2B4157] transition-colors hover:border-[#2B4157] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#2B4157]"
         >
           <Scale className="h-4 w-4 text-[#2B4157]" aria-hidden="true" />
           <span className="whitespace-nowrap">원단 가격비교</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={onOpenPatterns}
+          className="flex min-h-[52px] cursor-pointer items-center justify-center gap-2 rounded-2xl border border-[#3D5A47]/35 bg-white px-4 py-3 text-sm font-semibold text-[#3D5A47] transition-colors hover:border-[#3D5A47] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#2B4157]"
+        >
+          <BookOpen className="h-4 w-4 text-[#3D5A47]" aria-hidden="true" />
+          <span className="whitespace-nowrap">도안 · 유튜브</span>
         </button>
 
         <button

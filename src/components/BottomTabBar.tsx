@@ -19,7 +19,7 @@ export function BottomTabBar({ activeTab, onSelectTab }: BottomTabBarProps) {
   return (
     <nav
       aria-label="하단 메뉴"
-      className="pb-safe fixed right-0 bottom-0 left-0 z-40 border-t border-[#E5E1D8] bg-[#FAF9F6]/95 backdrop-blur-md md:hidden"
+      className="pb-safe fixed right-0 bottom-0 left-0 z-40 border-t border-[#E5E1D8] bg-[#FAF9F6]/95 backdrop-blur-md md:hidden print:hidden"
     >
       <div className="grid h-[60px] grid-cols-6 items-center px-1">
         {TABS.map(({ id, label, Icon }) => {

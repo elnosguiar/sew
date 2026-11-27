@@ -1,10 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
+  BookOpen,
   Check,
   CheckSquare,
   Copy,
+  ExternalLink,
   Plus,
+  Printer,
   Ruler,
   Scissors,
   Square,
@@ -16,19 +19,65 @@ import {
   QuickPatternSpec,
   SEWING_TROUBLESHOOTING,
 } from '../data/sewingGuides';
+import {
+  FREE_PATTERN_SOURCES,
+  SEWING_PATTERNS,
+  SewingPatternGuide,
+} from '../data/sewingPatterns';
+import { PatternBlueprintSVG } from './PatternBlueprintSVG';
+import { YouTubeRecommendationPanel } from './YouTubeRecommendationPanel';
+
+export type ToolboxSubTab = 'patterns' | 'guide' | 'cutting' | 'troubleshoot';
 
 interface SewingToolboxProps {
+  initialSubTab?: ToolboxSubTab;
+  initialSubTabKey?: number;
   onCreateProjectWithSpec: (preset: {
     title?: string;
     machineSpec: string;
     memo?: string;
+    steps?: string[];
   }) => void;
 }
 
-type ToolboxSubTab = 'guide' | 'cutting' | 'troubleshoot';
+const PATTERN_CATEGORIES = [
+  '전체',
+  '가방 · 파우치',
+  '주방 · 리빙',
+  '유아 · 선물',
+] as const;
 
-export function SewingToolbox({ onCreateProjectWithSpec }: SewingToolboxProps) {
-  const [subTab, setSubTab] = useState<ToolboxSubTab>('guide');
+export function SewingToolbox({
+  initialSubTab = 'patterns',
+  initialSubTabKey = 0,
+  onCreateProjectWithSpec,
+}: SewingToolboxProps) {
+  const [subTab, setSubTab] = useState<ToolboxSubTab>(initialSubTab);
+
+  useEffect(() => {
+    setSubTab(initialSubTab);
+  }, [initialSubTab, initialSubTabKey]);
+
+  // 0. Patterns & YouTube state
+  const [patternCategory, setPatternCategory] =
+    useState<(typeof PATTERN_CATEGORIES)[number]>('전체');
+  const [selectedPatternId, setSelectedPatternId] = useState<string>(
+    SEWING_PATTERNS[0].id
+  );
+
+  const filteredPatterns = useMemo(() => {
+    if (patternCategory === '전체') return SEWING_PATTERNS;
+    return SEWING_PATTERNS.filter((p) => p.category === patternCategory);
+  }, [patternCategory]);
+
+  const activePattern: SewingPatternGuide = useMemo(
+    () =>
+      filteredPatterns.find((p) => p.id === selectedPatternId) ??
+      SEWING_PATTERNS.find((p) => p.id === selectedPatternId) ??
+      filteredPatterns[0] ??
+      SEWING_PATTERNS[0],
+    [filteredPatterns, selectedPatternId]
+  );
 
   // 1. Needle & Thread Guide state
   const [selectedGuideId, setSelectedGuideId] = useState<string>(
@@ -123,6 +172,14 @@ export function SewingToolbox({ onCreateProjectWithSpec }: SewingToolboxProps) {
     setSeamCm(spec.seamCm);
   };
 
+  const handleApplyBlueprintToCutting = (pattern: SewingPatternGuide) => {
+    setPieceWidthCm(String(pattern.primaryCutSpec.widthCm));
+    setPieceHeightCm(String(pattern.primaryCutSpec.heightCm));
+    setPieceCount(String(pattern.primaryCutSpec.pieces));
+    setSeamCm(pattern.primaryCutSpec.seamCm);
+    setSubTab('cutting');
+  };
+
   // 4. Troubleshooting checked steps
   const [checkedSteps, setCheckedSteps] = useState<Record<string, boolean>>({});
   const [expandedIssueId, setExpandedIssueId] = useState<string>(
@@ -147,21 +204,36 @@ export function SewingToolbox({ onCreateProjectWithSpec }: SewingToolboxProps) {
   return (
     <div className="space-y-6">
       {/* Page Title */}
-      <div>
+      <div className="print:hidden">
         <h1 className="font-atelier-serif text-2xl font-bold text-[#262320]">
           미싱 도구함
         </h1>
         <p className="mt-1 text-xs text-[#6B655D] sm:text-sm">
-          재봉틀 옆에 띄워두고 바로 확인하는 바늘·실 조합, 원단 환산, 재단 계산, 응급처치 가이드입니다.
+          소품 재단 도안·유튜브 영상 추천부터 바늘·실 조합, 원단 환산, 재단 계산, 응급처치까지 한곳에서 확인하세요.
         </p>
       </div>
 
       {/* Sub-tool Segmented Control */}
       <div
-        className="grid grid-cols-3 gap-1 rounded-2xl border border-[#E5E1D8] bg-[#F3F1EC] p-1 sm:max-w-lg"
+        className="grid grid-cols-2 gap-1 rounded-2xl border border-[#E5E1D8] bg-[#F3F1EC] p-1 sm:grid-cols-4 sm:max-w-2xl print:hidden"
         role="tablist"
         aria-label="미싱 도구 선택"
       >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={subTab === 'patterns'}
+          onClick={() => setSubTab('patterns')}
+          className={`inline-flex min-h-[42px] cursor-pointer items-center justify-center gap-1.5 rounded-xl px-2.5 text-xs font-medium whitespace-nowrap transition-colors sm:text-sm ${
+            subTab === 'patterns'
+              ? 'bg-white text-[#262320] shadow-xs'
+              : 'text-[#6B655D] hover:text-[#262320]'
+          }`}
+        >
+          <BookOpen className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span>도안 · 유튜브</span>
+        </button>
+
         <button
           type="button"
           role="tab"
@@ -207,6 +279,282 @@ export function SewingToolbox({ onCreateProjectWithSpec }: SewingToolboxProps) {
           <span>응급처치</span>
         </button>
       </div>
+
+      {/* 0. Patterns Blueprint + Auto YouTube Recommendations */}
+      {subTab === 'patterns' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+            {/* Left: Pattern Category Filter + Selector */}
+            <div className="space-y-3 lg:col-span-4 print:hidden">
+              <div className="flex flex-wrap gap-1.5">
+                {PATTERN_CATEGORIES.map((category) => (
+                  <button
+                    key={category}
+                    type="button"
+                    onClick={() => setPatternCategory(category)}
+                    className={`min-h-[36px] cursor-pointer rounded-xl px-3 text-xs font-medium whitespace-nowrap transition-colors ${
+                      patternCategory === category
+                        ? 'bg-[#2B4157] text-white'
+                        : 'border border-[#DFDBD2] bg-white text-[#524C46] hover:border-[#2B4157]/50'
+                    }`}
+                  >
+                    {category}
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1">
+                {filteredPatterns.map((pattern) => {
+                  const active = pattern.id === activePattern.id;
+                  return (
+                    <button
+                      key={pattern.id}
+                      type="button"
+                      onClick={() => setSelectedPatternId(pattern.id)}
+                      className={`flex min-h-[64px] cursor-pointer flex-col justify-center rounded-2xl border px-4 py-3 text-left transition-colors focus-visible:outline-2 focus-visible:outline-[#2B4157] ${
+                        active
+                          ? 'border-[#2B4157] bg-[#2B4157] text-white'
+                          : 'border-[#E5E1D8] bg-white text-[#262320] hover:border-[#2B4157]/50'
+                      }`}
+                    >
+                      <span className="text-sm font-semibold">{pattern.title}</span>
+                      <span
+                        className={`mt-1 text-xs ${
+                          active ? 'text-white/80' : 'text-[#6B655D]'
+                        }`}
+                      >
+                        {pattern.category} · {pattern.difficulty} · {pattern.estimatedTime}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Right: Selected Pattern Blueprint Card */}
+            <section className="space-y-5 rounded-3xl border border-[#E5E1D8] bg-white p-5 sm:p-6 lg:col-span-8 print:col-span-12 print:border-none print:p-0">
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#F0EDE6] pb-4">
+                <div>
+                  <p className="text-xs font-medium text-[#6B655D]">
+                    {activePattern.category} · 난이도 {activePattern.difficulty} · {activePattern.estimatedTime}
+                  </p>
+                  <h2 className="mt-1 font-atelier-serif text-xl font-bold text-[#262320] sm:text-2xl">
+                    {activePattern.title}
+                  </h2>
+                  <p className="tabular-nums mt-1 text-xs text-[#4A453F] sm:text-sm">
+                    완성 크기: {activePattern.finishedSize}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 print:hidden">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onCreateProjectWithSpec({
+                        title: activePattern.title,
+                        machineSpec: activePattern.machineSpec,
+                        memo: `완성 크기: ${activePattern.finishedSize}\n추천 원단: ${activePattern.recommendedFabric}\n준비물: ${activePattern.materials.join(', ')}`,
+                        steps: activePattern.steps,
+                      })
+                    }
+                    className="inline-flex min-h-[40px] cursor-pointer items-center gap-1.5 rounded-xl bg-[#2B4157] px-3.5 text-xs font-semibold text-white hover:bg-[#213345]"
+                  >
+                    <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span>이 도안으로 작업 시작</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleApplyBlueprintToCutting(activePattern)}
+                    className="inline-flex min-h-[40px] cursor-pointer items-center gap-1.5 rounded-xl border border-[#DFDBD2] bg-[#FAF9F6] px-3 text-xs font-medium text-[#262320] hover:border-[#2B4157]"
+                  >
+                    <Ruler className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span>재단 계산기 적용</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="inline-flex min-h-[40px] cursor-pointer items-center gap-1.5 rounded-xl border border-[#DFDBD2] bg-white px-3 text-xs font-medium text-[#4A453F] hover:border-[#2B4157]"
+                  >
+                    <Printer className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span>인쇄 / PDF</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Blueprint SVG */}
+              <PatternBlueprintSVG shapeType={activePattern.shapeType} />
+
+              {/* Spec Summary */}
+              <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl bg-[#FAF9F6] p-3.5">
+                  <dt className="text-xs font-medium text-[#6B655D]">필요 원단량</dt>
+                  <dd className="mt-1 text-xs font-semibold text-[#262320] sm:text-sm">
+                    {activePattern.fabricRequirement}
+                  </dd>
+                </div>
+                <div className="rounded-2xl bg-[#FAF9F6] p-3.5">
+                  <dt className="text-xs font-medium text-[#6B655D]">추천 원단</dt>
+                  <dd className="mt-1 text-xs font-semibold text-[#262320] sm:text-sm">
+                    {activePattern.recommendedFabric}
+                  </dd>
+                </div>
+                <div className="rounded-2xl bg-[#FAF9F6] p-3.5">
+                  <dt className="text-xs font-medium text-[#6B655D]">바늘 · 실 세팅</dt>
+                  <dd className="mt-1 text-xs font-semibold text-[#2B4157] sm:text-sm">
+                    {activePattern.machineSpec}
+                  </dd>
+                </div>
+              </dl>
+
+              {/* Cut Parts Table */}
+              <div className="space-y-2">
+                <h3 className="text-xs font-semibold text-[#4A453F] sm:text-sm">
+                  부위별 재단 치수표 (단위: cm)
+                </h3>
+                <div className="overflow-x-auto rounded-2xl border border-[#E5E1D8]">
+                  <table className="w-full min-w-[440px] text-left text-xs sm:text-sm">
+                    <thead className="bg-[#FAF9F6] text-xs font-semibold text-[#524C46]">
+                      <tr>
+                        <th className="px-3.5 py-2.5">부위</th>
+                        <th className="px-3.5 py-2.5">가로 × 세로</th>
+                        <th className="px-3.5 py-2.5">장수</th>
+                        <th className="px-3.5 py-2.5">시접</th>
+                        <th className="px-3.5 py-2.5">참고</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#F0EDE6] bg-white">
+                      {activePattern.parts.map((part, idx) => (
+                        <tr key={idx}>
+                          <td className="px-3.5 py-2.5 font-medium text-[#262320]">
+                            {part.name}
+                          </td>
+                          <td className="tabular-nums px-3.5 py-2.5 font-semibold text-[#2B4157]">
+                            {part.widthCm} × {part.heightCm}cm
+                          </td>
+                          <td className="tabular-nums px-3.5 py-2.5 text-[#4A453F]">
+                            {part.quantity}장
+                          </td>
+                          <td className="tabular-nums px-3.5 py-2.5 text-[#4A453F]">
+                            {part.seamCm === 0 ? '제외' : `+${part.seamCm}cm`}
+                          </td>
+                          <td className="px-3.5 py-2.5 text-xs text-[#6B655D]">
+                            {part.note || '-'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Materials & Steps */}
+              <div className="grid grid-cols-1 gap-5 border-t border-[#F0EDE6] pt-4 sm:grid-cols-12">
+                <div className="space-y-2 sm:col-span-4">
+                  <h3 className="text-xs font-semibold text-[#4A453F] sm:text-sm">
+                    준비물
+                  </h3>
+                  <ul className="space-y-1.5 text-xs leading-relaxed text-[#4A453F] sm:text-sm">
+                    {activePattern.materials.map((item, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <span
+                          className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#3D5A47]"
+                          aria-hidden="true"
+                        />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="space-y-2 sm:col-span-8">
+                  <h3 className="text-xs font-semibold text-[#4A453F] sm:text-sm">
+                    만드는 순서
+                  </h3>
+                  <ol className="space-y-1.5 text-xs leading-relaxed text-[#262320] sm:text-sm">
+                    {activePattern.steps.map((step, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <span className="tabular-nums mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#EFECE5] text-[11px] font-bold text-[#2B4157]">
+                          {idx + 1}
+                        </span>
+                        <span>{step}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              </div>
+
+              <div className="rounded-2xl bg-[#F6F9F7] px-4 py-3 text-xs leading-relaxed text-[#3D5A47] sm:text-sm">
+                <span className="font-semibold">공방 팁: </span>
+                {activePattern.tip}
+              </div>
+            </section>
+          </div>
+
+          {/* Automatic YouTube Tutorial Recommendations */}
+          <section className="rounded-3xl border border-[#E5E1D8] bg-white p-5 sm:p-6 print:hidden">
+            <YouTubeRecommendationPanel
+              defaultQuery={activePattern.youtubeQuery}
+              heading={`"${activePattern.title}" 유튜브 만들기 영상 추천`}
+              subtitle="도안을 누르면 관련 재봉틀 영상을 자동으로 찾아 드립니다. 원하는 다른 소품을 직접 검색할 수도 있습니다."
+            />
+          </section>
+
+          {/* Free PDF Pattern Sources & Print Tip */}
+          <section className="space-y-4 rounded-3xl border border-[#E5E1D8] bg-white p-5 sm:p-6 print:hidden">
+            <div>
+              <h2 className="text-base font-semibold text-[#262320] md:text-lg">
+                무료 PDF 도안 자료실 &amp; 실물 프린트 팁
+              </h2>
+              <p className="mt-0.5 text-xs text-[#6B655D]">
+                위 기본 도안 외에도 더 다양한 가방·파우치·앞치마·의류 무료 PDF 도안을 바로 찾아 출력할 수 있습니다.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              {FREE_PATTERN_SOURCES.map((source) => (
+                <a
+                  key={source.id}
+                  href={source.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex flex-col justify-between rounded-2xl border border-[#E5E1D8] bg-[#FAF9F6] p-4 transition-colors hover:border-[#2B4157]/50 hover:bg-white"
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-semibold text-[#262320] group-hover:text-[#2B4157]">
+                        {source.name}
+                      </p>
+                      <ExternalLink
+                        className="mt-0.5 h-4 w-4 shrink-0 text-[#6B655D]"
+                        aria-hidden="true"
+                      />
+                    </div>
+                    <p className="mt-1 text-xs leading-relaxed text-[#524C46]">
+                      {source.description}
+                    </p>
+                  </div>
+                  <p className="mt-2.5 text-[11px] font-medium text-[#3D5A47]">
+                    {source.language} · 추천: {source.bestFor}
+                  </p>
+                </a>
+              ))}
+            </div>
+
+            <div className="rounded-2xl border border-[#E5E1D8] bg-[#FAF9F6] p-4 text-xs leading-relaxed text-[#4A453F]">
+              <p className="font-semibold text-[#262320]">
+                A4 실물 도안 출력 시 꼭 확인하세요
+              </p>
+              <p className="mt-1">
+                PDF 도안을 집 프린터로 인쇄할 때는 인쇄 창에서 배율을{' '}
+                <strong className="text-[#2B4157]">용지에 맞춤이 아닌 &ldquo;실제 크기 (100%)&rdquo;</strong>로
+                선택하세요. 첫 장에 그려진 3cm×3cm 또는 1인치 테스트 네모칸을 자로 재어 치수가 정확한지 확인한 뒤 이어 붙이면 어긋남 없이 재단할 수 있습니다.
+              </p>
+            </div>
+          </section>
+        </div>
+      )}
 
       {/* 1. Needle & Thread Guide */}
       {subTab === 'guide' && (

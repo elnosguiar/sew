@@ -29,7 +29,7 @@ export function AtelierHeader({
         : '새 작업';
 
   return (
-    <header className="sticky top-0 z-30 border-b border-[#E5E1D8] bg-[#FAF9F6]/92 backdrop-blur-md">
+    <header className="sticky top-0 z-30 border-b border-[#E5E1D8] bg-[#FAF9F6]/92 backdrop-blur-md print:hidden">
       <div className="mx-auto flex h-12 max-w-6xl items-center justify-between gap-8 px-4 md:h-16 md:px-6">
         <button
           type="button"

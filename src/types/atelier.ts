@@ -90,6 +90,22 @@ export interface FabricSearchResponse {
   sources: FabricSearchSource[];
 }
 
+export interface YouTubeVideoItem {
+  videoId: string;
+  title: string;
+  channel: string;
+  lengthText?: string;
+  viewCountText?: string;
+  thumbnailUrl: string;
+  watchUrl: string;
+}
+
+export interface YouTubeSearchResponse {
+  query: string;
+  searchUrl: string;
+  videos: YouTubeVideoItem[];
+}
+
 export type ProjectStatus = '준비 중' | '작업 중' | '마무리' | '제작 완료';
 
 export interface ProjectChecklistItem {

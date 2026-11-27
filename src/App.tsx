@@ -9,7 +9,7 @@ import {
 } from './components/FabricPriceCompare';
 import { HomeDashboard } from './components/HomeDashboard';
 import { ProjectDraftPreset, ProjectManager } from './components/ProjectManager';
-import { SewingToolbox } from './components/SewingToolbox';
+import { SewingToolbox, ToolboxSubTab } from './components/SewingToolbox';
 import {
   ComparisonCalculation,
   INITIAL_FABRIC_COMPARISONS,
@@ -82,6 +82,10 @@ export default function App() {
 
   const [costDraftPreset, setCostDraftPreset] =
     useState<CostDraftPreset | null>(null);
+
+  const [toolboxSubTab, setToolboxSubTab] =
+    useState<ToolboxSubTab>('patterns');
+  const [toolboxNavNonce, setToolboxNavNonce] = useState(0);
 
   useEffect(() => {
     try {
@@ -412,6 +416,11 @@ export default function App() {
             fabrics={fabrics}
             projects={projects}
             onNavigate={setActiveTab}
+            onOpenPatterns={() => {
+              setToolboxSubTab('patterns');
+              setToolboxNavNonce((n) => n + 1);
+              setActiveTab('toolbox');
+            }}
             onQuickAddFabric={openCreateFabric}
             onQuickAddProject={() => openCreateProject()}
             onAdvanceProjectStatus={handleAdvanceProjectStatus}
@@ -505,6 +514,8 @@ export default function App() {
 
         {activeTab === 'toolbox' && (
           <SewingToolbox
+            initialSubTab={toolboxSubTab}
+            initialSubTabKey={toolboxNavNonce}
             onCreateProjectWithSpec={(preset) => openCreateProject(preset)}
           />
         )}
