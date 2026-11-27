@@ -25,6 +25,7 @@ interface SearchCandidatePayload {
   unit: '1마' | '반마' | '1m' | '1야드';
   shippingFee: number;
   freeShippingThreshold: number;
+  widthCm?: number;
   note: string;
   url?: string;
 }
@@ -214,6 +215,59 @@ function buildFabricFallbackKeywords(rawQuery: string): string[] {
   });
 }
 
+function stripHtmlTags(input: string): string {
+  return decodeHtmlEntities(input.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' '));
+}
+
+function inferWidthCm(text: string): number | undefined {
+  const cmMatch = text.match(/(\d{2,3})\s*cm/i);
+  if (cmMatch) {
+    const val = Number(cmMatch[1]);
+    if (val >= 70 && val <= 260) return val;
+  }
+  if (/대폭|광폭/.test(text)) return 145;
+  if (/소폭/.test(text)) return 110;
+  return undefined;
+}
+
+function extractEffectiveCafe24Price(block: string): number {
+  // 1. Explicit discounted sale price attribute (3amsic / Cafe24 themes)
+  const attrSale = block.match(/data-sale-price="([\d,]+)"/)?.[1];
+  if (attrSale) {
+    const n = Number(attrSale.replace(/,/g, ''));
+    if (Number.isFinite(n) && n >= 300 && n <= 200000) return n;
+  }
+
+  // 2. Cafe24 discounted price row (할인판매가)
+  const saleLi = block.match(/<li[^>]*product_sale_price[\s\S]*?<\/li>/)?.[0];
+  if (saleLi) {
+    const m = saleLi.match(/([\d,]{3,8})\s*원/);
+    if (m) {
+      const n = Number(m[1].replace(/,/g, ''));
+      if (Number.isFinite(n) && n >= 300 && n <= 200000) return n;
+    }
+  }
+
+  // 3. Cafe24 regular selling price row (판매가 - never 소비자가 product_custom!)
+  const priceLi = block.match(/<li[^>]*product_price[\s\S]*?<\/li>/)?.[0];
+  if (priceLi) {
+    const m = priceLi.match(/([\d,]{3,8})\s*원/);
+    if (m) {
+      const n = Number(m[1].replace(/,/g, ''));
+      if (Number.isFinite(n) && n >= 300 && n <= 200000) return n;
+    }
+  }
+
+  // 4. Explicit prod price attribute
+  const attrProd = block.match(/data-prod-price="([\d,]+)"/)?.[1];
+  if (attrProd) {
+    const n = Number(attrProd.replace(/,/g, ''));
+    if (Number.isFinite(n) && n >= 300 && n <= 200000) return n;
+  }
+
+  return 0;
+}
+
 async function fetchCafe24MallProducts(params: {
   mallName: string;
   baseUrl: string;
@@ -233,34 +287,49 @@ async function fetchCafe24MallProducts(params: {
     });
     if (!res.ok) return [];
     const html = await res.text();
-    const blocks = html.match(/<li[^>]*id="anchorBoxId_\d+"[\s\S]*?<\/li>/g) || [];
+    // Split on outer product <li> so nested <li class="product_price"> is always preserved
+    const rawParts = html.split(/<li[^>]*id="anchorBoxId_/).slice(1, 18);
     const results: SearchCandidatePayload[] = [];
 
-    for (const block of blocks.slice(0, 12)) {
-      const href = block.match(/href="(\/product\/[^"]+)"/)?.[1];
-      const rawAlt = block.match(/<img[^>]*alt="([^"]+)"/)?.[1] || '';
-      let title = decodeHtmlEntities(rawAlt);
+    for (const part of rawParts) {
+      const prodId = part.match(/^(\d+)"/)?.[1] || '';
+      const href = part.match(/href="(\/product\/[^"]+)"/)?.[1];
+
+      const nameLinkHtml =
+        part.match(/class="df-prl__name[^"]*"[^>]*>([\s\S]*?)<\/a>/)?.[1] ||
+        part.match(/<div class="name">[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/)?.[1] ||
+        '';
+      const rawAlt = part.match(/<img[^>]*alt="([^"]+)"/)?.[1] || '';
+
+      let title = nameLinkHtml
+        ? stripHtmlTags(nameLinkHtml).replace(/^상품명\s*:\s*/, '').trim()
+        : decodeHtmlEntities(rawAlt);
+
       if (params.titleSuffixToStrip && title.endsWith(params.titleSuffixToStrip)) {
         title = title.slice(0, -params.titleSuffixToStrip.length).trim();
       }
+      if (prodId && title.endsWith(` ${prodId}`)) {
+        title = title.slice(0, -prodId.length).trim();
+      }
       if (!title) continue;
 
-      const priceBlock = block.match(/product_price[\s\S]*?<\/li>/)?.[0] || block;
-      const priceMatches = [...priceBlock.matchAll(/([\d,]{3,8})원/g)];
-      const price =
-        priceMatches.length > 0
-          ? Number(priceMatches[priceMatches.length - 1][1].replace(/,/g, ''))
-          : 0;
+      const summaryLi = part.match(/<li[^>]*summary_desc[\s\S]*?<\/li>/)?.[0] || '';
+      const summaryText = summaryLi
+        ? stripHtmlTags(summaryLi).replace(/^상품요약정보\s*:\s*/, '').trim()
+        : '';
 
-      if (!Number.isFinite(price) || price < 300 || price > 200000) continue;
+      const price = extractEffectiveCafe24Price(part);
+      if (!Number.isFinite(price) || price < 500 || price > 200000) continue;
+      if (price < 1300 && /샘플|스와치|견본|10cm/i.test(title)) continue;
 
-      const unit = inferUnitFromTitle(title);
+      const specText = `${title} ${summaryText}`;
+      const unit = inferUnitFromTitle(specText);
+      const widthCm = inferWidthCm(specText);
       const isPack = /1\+1|묶음|패키지|컷트지/i.test(title);
-      const widthMatch = title.match(/(\d{2,3})\s*cm|대폭|소폭/i);
-      const widthNote = widthMatch ? `폭 참고: ${widthMatch[0]}` : '';
       const noteParts = [
         isPack ? '묶음/세트 상품 (상세 길이 확인)' : '실시간 쇼핑몰 판매가',
-        widthNote,
+        widthCm ? `폭 ${widthCm}cm` : '',
+        summaryText && summaryText.length <= 40 ? summaryText : '',
       ].filter(Boolean);
 
       results.push({
@@ -270,6 +339,7 @@ async function fetchCafe24MallProducts(params: {
         unit,
         shippingFee: params.shippingFee,
         freeShippingThreshold: params.freeShippingThreshold,
+        widthCm,
         note: noteParts.join(' · '),
         url: href ? `${params.baseUrl}${href}` : params.searchUrl,
       });
@@ -281,17 +351,148 @@ async function fetchCafe24MallProducts(params: {
   }
 }
 
+async function fetch1000gageProducts(keyword: string): Promise<{
+  items: SearchCandidatePayload[];
+  searchUrl: string;
+}> {
+  const searchUrl = `https://www.1000gage.co.kr/shop/shopbrand.html?search=${encodeURIComponent(keyword)}`;
+  try {
+    const res = await fetch(searchUrl, {
+      headers: {
+        'User-Agent': BROWSER_UA,
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'ko-KR,ko;q=0.9',
+      },
+      signal: AbortSignal.timeout(5500),
+    });
+    if (!res.ok) return { items: [], searchUrl };
+    const html = await res.text();
+    const listArea = html.split('<div class="prd-list">')[1]?.split('<!-- //prd-list')[0] || '';
+    const cells = listArea.split('<div class="tb-center">').slice(1, 14);
+    const items: SearchCandidatePayload[] = [];
+
+    for (const cell of cells) {
+      const branduid = cell.match(/branduid=(\d+)/)?.[1];
+      const titleRaw = cell.match(/<li class="dsc">([\s\S]*?)<\/li>/)?.[1] || '';
+      const title = stripHtmlTags(titleRaw);
+      if (!title) continue;
+
+      const subRaw = cell.match(/<li class="subname">([\s\S]*?)<\/li>/)?.[1] || '';
+      const subText = stripHtmlTags(subRaw);
+
+      const priceHtml = cell.match(/<span class="price">([\s\S]*?)<\/span>/)?.[1] || '';
+      const priceMatch = priceHtml.match(/([\d,]{3,8})\s*원/);
+      const price = priceMatch ? Number(priceMatch[1].replace(/,/g, '')) : 0;
+      if (!Number.isFinite(price) || price < 500 || price > 200000) continue;
+      if (price < 1300 && /샘플|스와치|견본|10cm/i.test(title)) continue;
+
+      const specText = `${title} ${subText}`;
+      const unit = inferUnitFromTitle(specText);
+      const widthCm = inferWidthCm(specText);
+      const isPack = /1\+1|묶음|패키지|컷트지/i.test(title);
+      const noteParts = [
+        isPack ? '묶음/세트 상품 (상세 길이 확인)' : '실시간 쇼핑몰 판매가',
+        widthCm ? `폭 ${widthCm}cm` : '',
+      ].filter(Boolean);
+
+      items.push({
+        mallName: '천가게',
+        productTitle: title,
+        estimatedPricePerYard: price,
+        unit,
+        shippingFee: 3000,
+        freeShippingThreshold: 50000,
+        widthCm,
+        note: noteParts.join(' · '),
+        url: branduid
+          ? `https://www.1000gage.co.kr/shop/shopdetail.html?branduid=${branduid}`
+          : searchUrl,
+      });
+    }
+
+    return { items, searchUrl };
+  } catch {
+    return { items: [], searchUrl };
+  }
+}
+
+async function fetch1004yoProducts(keyword: string): Promise<{
+  items: SearchCandidatePayload[];
+  searchUrl: string;
+}> {
+  const searchUrl = `https://1004yo.com/shop/shopbrand.html?search=${encodeURIComponent(keyword)}`;
+  try {
+    const res = await fetch(searchUrl, {
+      headers: {
+        'User-Agent': BROWSER_UA,
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'ko-KR,ko;q=0.9',
+      },
+      signal: AbortSignal.timeout(5500),
+    });
+    if (!res.ok) return { items: [], searchUrl };
+    const buf = await res.arrayBuffer();
+    const html = new TextDecoder('euc-kr').decode(buf);
+    const listArea = html.split('class="prdList')[1] || '';
+    const cells = listArea.split(/<li class="item"/).slice(1, 14);
+    const items: SearchCandidatePayload[] = [];
+
+    for (const cell of cells) {
+      const branduid = cell.match(/branduid=(\d+)/)?.[1];
+      const nameHtml = cell.match(/<p class="name">([\s\S]*?)<\/p>/)?.[1] || '';
+      const cleanedNameHtml = nameHtml.replace(/<div[^>]*display\s*:\s*none[^>]*>[\s\S]*?<\/div>/gi, ' ');
+      const title = stripHtmlTags(cleanedNameHtml);
+      if (!title) continue;
+
+      const priceMatch = cell.match(/<li class="price">\s*([\d,]{3,8})\s*원/);
+      const price = priceMatch ? Number(priceMatch[1].replace(/,/g, '')) : 0;
+      if (!Number.isFinite(price) || price < 500 || price > 200000) continue;
+      if (price < 1300 && /샘플|스와치|견본|10cm/i.test(title)) continue;
+
+      const unit = inferUnitFromTitle(title);
+      const widthCm = inferWidthCm(title);
+      const isPack = /1\+1|묶음|패키지|컷트지/i.test(title);
+      const noteParts = [
+        isPack ? '묶음/세트 상품 (상세 길이 확인)' : '실시간 쇼핑몰 판매가',
+        widthCm ? `폭 ${widthCm}cm` : '',
+      ].filter(Boolean);
+
+      items.push({
+        mallName: '천싸요',
+        productTitle: title,
+        estimatedPricePerYard: price,
+        unit,
+        shippingFee: 3000,
+        freeShippingThreshold: 50000,
+        widthCm,
+        note: noteParts.join(' · '),
+        url: branduid
+          ? `https://1004yo.com/shop/shopdetail.html?branduid=${branduid}`
+          : searchUrl,
+      });
+    }
+
+    return { items, searchUrl };
+  } catch {
+    return { items: [], searchUrl };
+  }
+}
+
 async function queryMallsOnce(keyword: string): Promise<{
   douItems: SearchCandidatePayload[];
   samsikItems: SearchCandidatePayload[];
+  gageItems: SearchCandidatePayload[];
+  sayoItems: SearchCandidatePayload[];
   douUrl: string;
   samsikUrl: string;
+  gageUrl: string;
+  sayoUrl: string;
 }> {
   const encoded = encodeURIComponent(keyword);
   const douUrl = `https://doufabric.com/product/search.html?keyword=${encoded}`;
   const samsikUrl = `https://3amsic.com/product/search.html?keyword=${encoded}`;
 
-  const [douItems, samsikItems] = await Promise.all([
+  const [douItems, samsikItems, gageRes, sayoRes] = await Promise.all([
     fetchCafe24MallProducts({
       mallName: '도우패브릭',
       baseUrl: 'https://doufabric.com',
@@ -307,9 +508,36 @@ async function queryMallsOnce(keyword: string): Promise<{
       shippingFee: 3000,
       freeShippingThreshold: 50000,
     }),
+    fetch1000gageProducts(keyword),
+    fetch1004yoProducts(keyword),
   ]);
 
-  return { douItems, samsikItems, douUrl, samsikUrl };
+  return {
+    douItems,
+    samsikItems,
+    gageItems: gageRes.items,
+    sayoItems: sayoRes.items,
+    douUrl,
+    samsikUrl,
+    gageUrl: gageRes.searchUrl,
+    sayoUrl: sayoRes.searchUrl,
+  };
+}
+
+function isRelevantFabricProduct(title: string, rawQuery: string): boolean {
+  if (!/(패턴|도안)/i.test(rawQuery) && /(가방패턴|종이패턴|실물패턴|\[P\d+\])/i.test(title)) {
+    return false;
+  }
+  if (
+    !/(웨이빙|가방끈|스트랩|지퍼|라벨|단추|바늘|실|바이어스)/i.test(rawQuery) &&
+    /(웨이빙|가방끈|스트랩|지퍼|라벨|단추|바이어스)/i.test(title)
+  ) {
+    return false;
+  }
+  if (!/(배경지|촬영)/i.test(rawQuery) && /촬영용\s*배경지/i.test(title)) {
+    return false;
+  }
+  return true;
 }
 
 async function fetchLiveKoreanFabricStores(
@@ -319,44 +547,78 @@ async function fetchLiveKoreanFabricStores(
   sources: Array<{ title: string; uri: string }>;
   matchedKeyword: string;
 }> {
+  const filterItems = (items: SearchCandidatePayload[]) =>
+    items.filter((item) => isRelevantFabricProduct(item.productTitle, query));
+
   const primary = await queryMallsOnce(query);
-  let allItems = [...primary.douItems, ...primary.samsikItems];
+  const pDou = filterItems(primary.douItems);
+  const pGage = filterItems(primary.gageItems);
+  const pSayo = filterItems(primary.sayoItems);
+  const pSamsik = filterItems(primary.samsikItems);
+
+  let allItems = [
+    ...pDou.slice(0, 3),
+    ...pGage.slice(0, 3),
+    ...pSayo.slice(0, 3),
+    ...pSamsik.slice(0, 3),
+  ];
   const sources: Array<{ title: string; uri: string }> = [];
   let matchedKeyword = query;
 
-  if (primary.douItems.length > 0) {
+  if (pDou.length > 0) {
     sources.push({ title: `도우패브릭 "${query}" 검색 결과`, uri: primary.douUrl });
   }
-  if (primary.samsikItems.length > 0) {
+  if (pGage.length > 0) {
+    sources.push({ title: `천가게 "${query}" 검색 결과`, uri: primary.gageUrl });
+  }
+  if (pSayo.length > 0) {
+    sources.push({ title: `천싸요 "${query}" 검색 결과`, uri: primary.sayoUrl });
+  }
+  if (pSamsik.length > 0) {
     sources.push({ title: `삼식이원단 "${query}" 검색 결과`, uri: primary.samsikUrl });
   }
 
   // Fallback to simplified Korean fabric keywords if exact phrase returned too few results
-  if (allItems.length < 3) {
+  if (allItems.length < 4) {
     const fallbacks = buildFabricFallbackKeywords(query).slice(0, 3);
     for (const fb of fallbacks) {
       const res = await queryMallsOnce(fb);
-      const fbItems = [...res.douItems, ...res.samsikItems];
+      const fDou = filterItems(res.douItems);
+      const fGage = filterItems(res.gageItems);
+      const fSayo = filterItems(res.sayoItems);
+      const fSamsik = filterItems(res.samsikItems);
+      const fbItems = [
+        ...fDou.slice(0, 3),
+        ...fGage.slice(0, 3),
+        ...fSayo.slice(0, 3),
+        ...fSamsik.slice(0, 3),
+      ];
       if (fbItems.length > 0) {
         if (allItems.length === 0) {
           matchedKeyword = fb;
         }
         allItems = [...allItems, ...fbItems];
-        if (res.douItems.length > 0) {
+        if (fDou.length > 0) {
           sources.push({ title: `도우패브릭 "${fb}" 검색 결과`, uri: res.douUrl });
         }
-        if (res.samsikItems.length > 0) {
+        if (fGage.length > 0) {
+          sources.push({ title: `천가게 "${fb}" 검색 결과`, uri: res.gageUrl });
+        }
+        if (fSayo.length > 0) {
+          sources.push({ title: `천싸요 "${fb}" 검색 결과`, uri: res.sayoUrl });
+        }
+        if (fSamsik.length > 0) {
           sources.push({ title: `삼식이원단 "${fb}" 검색 결과`, uri: res.samsikUrl });
         }
-        if (allItems.length >= 6) break;
+        if (allItems.length >= 8) break;
       }
     }
   }
 
-  // Always include Naver Shopping & Korean mall quick links (zero foreign URLs)
+  // Always include working Naver Shopping search link (zero foreign URLs)
   sources.push({
     title: `네이버쇼핑 "${query}" 원단 가격비교`,
-    uri: `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(`${query} 원단`)}`,
+    uri: `https://search.naver.com/search.naver?where=shopping&query=${encodeURIComponent(`${query} 원단`)}`,
   });
 
   // Deduplicate & sort cheapest normalized 1-yard price first
@@ -368,7 +630,7 @@ async function fetchLiveKoreanFabricStores(
     return true;
   });
 
-  deduped.sort((a, b) => {
+  const sortByPrice = (a: SearchCandidatePayload, b: SearchCandidatePayload) => {
     const aIsPack = /1\+1|묶음|세트/i.test(a.productTitle) ? 1 : 0;
     const bIsPack = /1\+1|묶음|세트/i.test(b.productTitle) ? 1 : 0;
     if (aIsPack !== bIsPack) return aIsPack - bIsPack;
@@ -376,10 +638,33 @@ async function fetchLiveKoreanFabricStores(
       normalizePricePerYard(a.estimatedPricePerYard, a.unit) -
       normalizePricePerYard(b.estimatedPricePerYard, b.unit)
     );
-  });
+  };
+
+  deduped.sort(sortByPrice);
+
+  // Pick up to 2 cheapest from each mall first so multiple malls are represented, then fill up to 8
+  const picked: SearchCandidatePayload[] = [];
+  const mallCounts = new Map<string, number>();
+  for (const item of deduped) {
+    const count = mallCounts.get(item.mallName) ?? 0;
+    if (count < 2) {
+      picked.push(item);
+      mallCounts.set(item.mallName, count + 1);
+    }
+    if (picked.length >= 8) break;
+  }
+  if (picked.length < 8) {
+    for (const item of deduped) {
+      if (!picked.includes(item)) {
+        picked.push(item);
+      }
+      if (picked.length >= 8) break;
+    }
+  }
+  picked.sort(sortByPrice);
 
   return {
-    candidates: deduped.slice(0, 8),
+    candidates: picked,
     sources: sources.slice(0, 6),
     matchedKeyword,
   };
@@ -715,6 +1000,23 @@ async function startServer() {
         });
         return;
       }
+
+      // Sort merged candidates by effective total (including shipping fee / free-shipping threshold) for neededYards
+      const computeEffectiveTotal = (c: SearchCandidatePayload) => {
+        const perYard = normalizePricePerYard(c.estimatedPricePerYard, c.unit);
+        const merch = Math.round(perYard * neededYards);
+        const isFree =
+          c.shippingFee <= 0 ||
+          (c.freeShippingThreshold > 0 && merch >= c.freeShippingThreshold);
+        return merch + (isFree ? 0 : c.shippingFee);
+      };
+
+      mergedCandidates.sort((a, b) => {
+        const aIsPack = /1\+1|묶음|세트/i.test(a.productTitle) ? 1 : 0;
+        const bIsPack = /1\+1|묶음|세트/i.test(b.productTitle) ? 1 : 0;
+        if (aIsPack !== bIsPack) return aIsPack - bIsPack;
+        return computeEffectiveTotal(a) - computeEffectiveTotal(b);
+      });
 
       // Compute real price range from fetched candidates if Gemini summary wasn't available
       const perYardPrices = mergedCandidates

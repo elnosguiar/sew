@@ -24,6 +24,8 @@ import {
   normalizePricePerYard,
   PRICE_UNITS,
   QUICK_FABRIC_SEARCH_KEYWORDS,
+  repairFabricProductUrl,
+  resolveComparisonSiteUrl,
 } from '../data/fabricMalls';
 import {
   FabricComparisonItem,
@@ -187,6 +189,36 @@ export function FabricPriceCompare({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const computedSearchCandidates = useMemo(() => {
+    if (!searchResult?.candidates?.length) return [];
+    return searchResult.candidates
+      .map((candidate, originalIndex) => {
+        const metrics = calculateComparisonMetrics(
+          {
+            id: `search-${originalIndex}`,
+            fabricName: candidate.productTitle,
+            mallName: candidate.mallName,
+            unit: candidate.unit,
+            unitPrice: candidate.estimatedPricePerYard,
+            shippingFee: candidate.shippingFee,
+            freeShippingThreshold: candidate.freeShippingThreshold,
+            widthCm: candidate.widthCm,
+            productUrl: candidate.url,
+            note: candidate.note,
+            createdAt: '',
+          },
+          neededYards
+        );
+        return { candidate, metrics, originalIndex };
+      })
+      .sort((a, b) => {
+        const aIsPack = /1\+1|묶음|세트/i.test(a.candidate.productTitle) ? 1 : 0;
+        const bIsPack = /1\+1|묶음|세트/i.test(b.candidate.productTitle) ? 1 : 0;
+        if (aIsPack !== bIsPack) return aIsPack - bIsPack;
+        return a.metrics.effectiveTotal - b.metrics.effectiveTotal;
+      });
+  }, [searchResult, neededYards]);
+
   const handleAddCandidateToCompare = (candidate: FabricSearchCandidate, index: number) => {
     onSaveComparison({
       fabricName: candidate.productTitle,
@@ -195,6 +227,7 @@ export function FabricPriceCompare({
       unitPrice: candidate.estimatedPricePerYard,
       shippingFee: candidate.shippingFee,
       freeShippingThreshold: candidate.freeShippingThreshold,
+      widthCm: candidate.widthCm,
       productUrl: candidate.url,
       note: candidate.note || '실시간 검색에서 추가됨',
     });
@@ -543,17 +576,16 @@ export function FabricPriceCompare({
                           <span className="whitespace-nowrap">원가 계산</span>
                         </button>
 
-                        {item.productUrl && (
-                          <a
-                            href={item.productUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex min-h-[40px] items-center gap-1 rounded-xl border border-[#DFDBD2] bg-white px-3 text-xs font-medium text-[#2B4157] transition-colors hover:border-[#2B4157]"
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                            <span className="whitespace-nowrap">사이트</span>
-                          </a>
-                        )}
+                        <a
+                          href={resolveComparisonSiteUrl(item)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={`${item.mallName} 사이트 열기`}
+                          className="inline-flex min-h-[40px] items-center gap-1 rounded-xl border border-[#DFDBD2] bg-white px-3 text-xs font-medium text-[#2B4157] transition-colors hover:border-[#2B4157]"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                          <span className="whitespace-nowrap">사이트</span>
+                        </a>
 
                         {confirmingDelete ? (
                           <div className="flex items-center gap-1">
@@ -734,43 +766,79 @@ export function FabricPriceCompare({
               </p>
             </div>
 
-            {searchResult.candidates.length > 0 && (
+            {computedSearchCandidates.length > 0 && (
               <div className="space-y-2.5">
                 <p className="text-xs font-semibold text-[#4A453F]">
-                  검색된 원단 후보 (버튼을 누르면 위 단가 비교표에 바로 추가됩니다)
+                  실시간 검색 상품 ({formatQuantity(neededYards)}마 기준 배송비 포함 실질 최저가 순)
                 </p>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  {searchResult.candidates.map((candidate, idx) => {
-                    const key = `${candidate.mallName}-${candidate.productTitle}-${idx}`;
+                  {computedSearchCandidates.map(({ candidate, metrics, originalIndex }, rankIdx) => {
+                    const key = `${candidate.mallName}-${candidate.productTitle}-${originalIndex}`;
                     const isAdded = Boolean(addedCandidateKeys[key]);
-                    const estTotal =
-                      normalizePricePerYard(candidate.estimatedPricePerYard, candidate.unit) *
-                      neededYards;
+                    const isTopDeal = rankIdx === 0;
 
                     return (
                       <div
                         key={key}
-                        className="flex flex-col justify-between gap-3 rounded-2xl border border-[#E5E1D8] bg-white p-4"
+                        className={`flex flex-col justify-between gap-3 rounded-2xl border p-4 ${
+                          isTopDeal
+                            ? 'border-[#3D5A47]/45 bg-[#F6F9F7]'
+                            : 'border-[#E5E1D8] bg-white'
+                        }`}
                       >
-                        <div className="space-y-1">
+                        <div className="space-y-1.5">
                           <div className="flex items-center justify-between gap-2 text-xs text-[#6B655D]">
-                            <span className="font-semibold text-[#2B4157]">
-                              {candidate.mallName}
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className={`font-semibold tabular-nums ${
+                                  isTopDeal ? 'text-[#3D5A47]' : 'text-[#2B4157]'
+                                }`}
+                              >
+                                {isTopDeal ? '최저가' : `${rankIdx + 1}위`}
+                              </span>
+                              <span aria-hidden="true">·</span>
+                              <span className="font-semibold text-[#2B4157]">
+                                {candidate.mallName}
+                              </span>
+                            </div>
                             <span className="tabular-nums">
-                              배송비 {formatKRW(candidate.shippingFee)} ·{' '}
-                              {formatKRW(candidate.freeShippingThreshold)}↑ 무배
+                              {metrics.isFreeShipping
+                                ? '무료배송 조건 달성'
+                                : `배송비 ${formatKRW(metrics.appliedShipping)} (${formatKRW(candidate.freeShippingThreshold)}↑ 무배)`}
                             </span>
                           </div>
+
                           <p className="text-sm font-semibold text-[#262320]">
                             {candidate.productTitle}
                           </p>
-                          <p className="tabular-nums text-xs font-medium text-[#262320]">
-                            예상가 {formatKRW(candidate.estimatedPricePerYard)} / {candidate.unit}{' '}
-                            <span className="font-normal text-[#7A736A]">
-                              ({formatQuantity(neededYards)}마 기준 약 {formatKRW(estTotal)})
-                            </span>
-                          </p>
+
+                          <div className="flex flex-wrap items-baseline justify-between gap-2 rounded-xl bg-white/80 px-3 py-2 text-xs tabular-nums">
+                            <div>
+                              <span className="text-[#6B655D]">
+                                판매가 {formatKRW(candidate.estimatedPricePerYard)}/{candidate.unit}
+                              </span>
+                              {candidate.unit !== '1마' && (
+                                <span className="ml-1.5 text-[#524C46]">
+                                  (1마 환산 {formatKRW(metrics.normalizedPerYard)})
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-right">
+                              <span className="font-bold text-[#2B4157]">
+                                실질 1마당 {formatKRW(metrics.effectivePerYard)}
+                              </span>
+                              <span className="ml-1.5 text-[#6B655D]">
+                                (총 {formatKRW(metrics.effectiveTotal)})
+                              </span>
+                            </div>
+                          </div>
+
+                          {metrics.remainingForFreeShipping > 0 && (
+                            <p className="tabular-nums text-[11px] text-[#7A5C43]">
+                              무료배송까지 {formatKRW(metrics.remainingForFreeShipping)} 더 담으면 배송비 {formatKRW(candidate.shippingFee)} 절약
+                            </p>
+                          )}
+
                           {candidate.note && (
                             <p className="text-xs text-[#7A736A]">{candidate.note}</p>
                           )}
@@ -779,11 +847,11 @@ export function FabricPriceCompare({
                         <div className="flex items-center gap-2 pt-1">
                           <button
                             type="button"
-                            onClick={() => handleAddCandidateToCompare(candidate, idx)}
+                            onClick={() => handleAddCandidateToCompare(candidate, originalIndex)}
                             disabled={isAdded}
                             className={`inline-flex min-h-[40px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl px-3 text-xs font-semibold transition-colors ${
                               isAdded
-                                ? 'border border-[#3D5A47]/40 bg-[#F6F9F7] text-[#3D5A47]'
+                                ? 'border border-[#3D5A47]/40 bg-white text-[#3D5A47]'
                                 : 'bg-[#2B4157] text-white hover:bg-[#213345]'
                             }`}
                           >
@@ -800,12 +868,12 @@ export function FabricPriceCompare({
                             )}
                           </button>
 
-                          {candidate.url && (
+                          {repairFabricProductUrl(candidate.url) && (
                             <a
-                              href={candidate.url}
+                              href={repairFabricProductUrl(candidate.url)}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex min-h-[40px] items-center gap-1 rounded-xl border border-[#DFDBD2] px-3 text-xs font-medium text-[#262320] hover:border-[#2B4157]"
+                              className="inline-flex min-h-[40px] items-center gap-1 rounded-xl border border-[#DFDBD2] bg-white px-3 text-xs font-medium text-[#262320] hover:border-[#2B4157]"
                             >
                               <span>링크</span>
                               <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
@@ -1066,7 +1134,7 @@ function ComparisonFormSheet({
     }
 
     const parsedWidth = Number(widthCm);
-    const trimmedUrl = productUrl.trim();
+    const normalizedUrl = repairFabricProductUrl(productUrl);
 
     onSave(
       {
@@ -1080,10 +1148,7 @@ function ComparisonFormSheet({
           Math.round(Number(freeShippingThreshold) || 0)
         ),
         widthCm: parsedWidth > 0 ? parsedWidth : undefined,
-        productUrl:
-          trimmedUrl.startsWith('http://') || trimmedUrl.startsWith('https://')
-            ? trimmedUrl
-            : undefined,
+        productUrl: normalizedUrl,
         note: note.trim() || undefined,
       },
       editingItem?.id
@@ -1281,10 +1346,11 @@ function ComparisonFormSheet({
             </label>
             <input
               id="cmp-url"
-              type="url"
+              type="text"
+              inputMode="url"
               value={productUrl}
               onChange={(e) => setProductUrl(e.target.value)}
-              placeholder="https://..."
+              placeholder="https://... 또는 쇼핑몰 주소"
               className="min-h-[44px] w-full rounded-xl border border-[#DFDBD2] bg-white px-3.5 text-sm text-[#262320] focus:border-[#2B4157] focus:outline-none"
             />
           </div>

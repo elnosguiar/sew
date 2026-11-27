@@ -82,8 +82,16 @@ export function CostCalculator({
     };
   }, [parsedFabric, parsedNotions, parsedOther, totalCost]);
 
+  const effectiveSelectedFabricId = useMemo(
+    () =>
+      fabrics.some((f) => f.id === selectedFabricId)
+        ? selectedFabricId
+        : (fabrics[0]?.id ?? ''),
+    [fabrics, selectedFabricId]
+  );
+
   const handleApplyFabricCalc = () => {
-    const target = fabrics.find((f) => f.id === selectedFabricId);
+    const target = fabrics.find((f) => f.id === effectiveSelectedFabricId);
     if (!target || target.quantity <= 0) return;
     const unitPrice = target.price / target.quantity;
     const used = Math.max(0, Number(usedAmount) || 0);
@@ -232,7 +240,7 @@ export function CostCalculator({
                 <div className="space-y-2.5 rounded-2xl border border-[#E5E1D8] bg-[#FAF9F6] p-3.5">
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                     <select
-                      value={selectedFabricId}
+                      value={effectiveSelectedFabricId}
                       onChange={(e) => setSelectedFabricId(e.target.value)}
                       aria-label="원단 선택"
                       className="min-h-[44px] rounded-xl border border-[#DFDBD2] bg-white px-3 text-xs text-[#262320] sm:col-span-2"
@@ -257,7 +265,7 @@ export function CostCalculator({
                         className="tabular-nums min-h-[44px] w-full rounded-xl border border-[#DFDBD2] bg-white px-3 text-xs text-[#262320]"
                       />
                       <span className="shrink-0 text-xs text-[#6B655D]">
-                        {fabrics.find((f) => f.id === selectedFabricId)?.unit ?? '마'}
+                        {fabrics.find((f) => f.id === effectiveSelectedFabricId)?.unit ?? '마'}
                       </span>
                     </div>
                   </div>

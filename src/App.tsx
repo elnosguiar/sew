@@ -13,6 +13,7 @@ import { SewingToolbox, ToolboxSubTab } from './components/SewingToolbox';
 import {
   ComparisonCalculation,
   INITIAL_FABRIC_COMPARISONS,
+  repairFabricProductUrl,
 } from './data/fabricMalls';
 import {
   INITIAL_COST_RECORDS,
@@ -59,9 +60,13 @@ export default function App() {
   const [costRecords, setCostRecords] = useState<CostRecord[]>(() =>
     loadFromStorage(STORAGE_KEYS.costs, INITIAL_COST_RECORDS)
   );
-  const [comparisons, setComparisons] = useState<FabricComparisonItem[]>(() =>
-    loadFromStorage(STORAGE_KEYS.comparisons, INITIAL_FABRIC_COMPARISONS)
-  );
+  const [comparisons, setComparisons] = useState<FabricComparisonItem[]>(() => {
+    const loaded = loadFromStorage(STORAGE_KEYS.comparisons, INITIAL_FABRIC_COMPARISONS);
+    return loaded.map((item) => ({
+      ...item,
+      productUrl: repairFabricProductUrl(item.productUrl),
+    }));
+  });
 
   // Sheet states managed here so header/home/toolbox/compare quick actions can open them seamlessly
   const [isFabricSheetOpen, setIsFabricSheetOpen] = useState(false);
@@ -250,13 +255,17 @@ export default function App() {
     data: Omit<FabricComparisonItem, 'id' | 'createdAt'>,
     existingId?: string
   ) => {
+    const sanitizedData = {
+      ...data,
+      productUrl: repairFabricProductUrl(data.productUrl),
+    };
     if (existingId) {
       setComparisons((prev) =>
-        prev.map((item) => (item.id === existingId ? { ...item, ...data } : item))
+        prev.map((item) => (item.id === existingId ? { ...item, ...sanitizedData } : item))
       );
     } else {
       const created: FabricComparisonItem = {
-        ...data,
+        ...sanitizedData,
         id: `cmp-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
         createdAt: new Date().toISOString(),
       };
@@ -346,7 +355,12 @@ export default function App() {
       setProjects(parsed.projects);
       setCostRecords(parsed.costRecords);
       if (Array.isArray(parsed.comparisons)) {
-        setComparisons(parsed.comparisons);
+        setComparisons(
+          parsed.comparisons.map((item) => ({
+            ...item,
+            productUrl: repairFabricProductUrl(item.productUrl),
+          }))
+        );
       }
       const compareText = Array.isArray(parsed.comparisons)
         ? `, 가격비교 ${parsed.comparisons.length}건`

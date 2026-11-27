@@ -72,6 +72,7 @@ export interface FabricSearchCandidate {
   unit: PriceUnit;
   shippingFee: number;
   freeShippingThreshold: number;
+  widthCm?: number;
   note: string;
   url?: string;
 }

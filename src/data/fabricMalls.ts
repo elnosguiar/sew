@@ -51,7 +51,7 @@ export const KOREAN_FABRIC_MALLS: FabricMallInfo[] = [
     name: '천가게',
     category: '종합/부자재',
     url: 'https://www.1000gage.co.kr',
-    searchUrlTemplate: 'https://www.1000gage.co.kr/shop/search.php?search_text={query}',
+    searchUrlTemplate: 'https://www.1000gage.co.kr/shop/shopbrand.html?search={query}',
     defaultShippingFee: 3000,
     freeShippingThreshold: 50000,
     priceTier: '가성비 우수',
@@ -66,7 +66,7 @@ export const KOREAN_FABRIC_MALLS: FabricMallInfo[] = [
     name: '천싸요',
     category: '가성비 무지',
     url: 'https://1004yo.com',
-    searchUrlTemplate: 'https://1004yo.com/product/search.html?keyword={query}',
+    searchUrlTemplate: 'https://1004yo.com/shop/shopbrand.html?search={query}',
     defaultShippingFee: 3000,
     freeShippingThreshold: 50000,
     priceTier: '가성비 우수',
@@ -96,7 +96,7 @@ export const KOREAN_FABRIC_MALLS: FabricMallInfo[] = [
     name: '네스홈',
     category: '감성 린넨/프린트',
     url: 'https://www.nesshome.com',
-    searchUrlTemplate: 'https://www.nesshome.com/shop/shopbrand.html?search={query}',
+    searchUrlTemplate: 'https://www.nesshome.com/product/search.html?keyword={query}',
     defaultShippingFee: 3000,
     freeShippingThreshold: 50000,
     priceTier: '디자이너/중고가',
@@ -110,8 +110,8 @@ export const KOREAN_FABRIC_MALLS: FabricMallInfo[] = [
     id: 'naver-shopping',
     name: '네이버쇼핑 원단 비교',
     category: '오픈마켓/최저가',
-    url: 'https://search.shopping.naver.com',
-    searchUrlTemplate: 'https://search.shopping.naver.com/search/all?query={query}+원단',
+    url: 'https://search.naver.com/search.naver?where=shopping&query=%EC%9B%90%EB%8B%A8',
+    searchUrlTemplate: 'https://search.naver.com/search.naver?where=shopping&query={query}+원단',
     defaultShippingFee: 3000,
     freeShippingThreshold: 30000,
     priceTier: '실속 최저가',
@@ -133,7 +133,7 @@ export const INITIAL_FABRIC_COMPARISONS: FabricComparisonItem[] = [
     shippingFee: 2500,
     freeShippingThreshold: 50000,
     widthCm: 110,
-    productUrl: 'https://doufabric.com/product/search.html?keyword=30수+무지',
+    productUrl: 'https://doufabric.com/product/search.html?keyword=30%EC%88%98%20%EB%AC%B4%EC%A7%80',
     note: '무지 기본가 저렴 · 2,500원 배송비',
     createdAt: '2026-11-24T09:00:00.000Z',
   },
@@ -146,7 +146,7 @@ export const INITIAL_FABRIC_COMPARISONS: FabricComparisonItem[] = [
     shippingFee: 3000,
     freeShippingThreshold: 50000,
     widthCm: 110,
-    productUrl: 'https://www.1000gage.co.kr/shop/search.php?search_text=30수+무지',
+    productUrl: 'https://www.1000gage.co.kr/shop/shopbrand.html?search=30%EC%88%98%20%EB%AC%B4%EC%A7%80',
     note: '반마(45cm) 기준 1,850원 → 1마 환산 3,700원 · 수요일 앱 3만원 무배',
     createdAt: '2026-11-24T09:10:00.000Z',
   },
@@ -159,7 +159,7 @@ export const INITIAL_FABRIC_COMPARISONS: FabricComparisonItem[] = [
     shippingFee: 3000,
     freeShippingThreshold: 50000,
     widthCm: 110,
-    productUrl: 'https://1004yo.com/product/search.html?keyword=30수+무지',
+    productUrl: 'https://1004yo.com/shop/shopbrand.html?search=30%EC%88%98%20%EB%AC%B4%EC%A7%80',
     note: '바이오 워싱 가공 포함 · 색상 다양',
     createdAt: '2026-11-24T09:20:00.000Z',
   },
@@ -172,7 +172,7 @@ export const INITIAL_FABRIC_COMPARISONS: FabricComparisonItem[] = [
     shippingFee: 0,
     freeShippingThreshold: 0,
     widthCm: 110,
-    productUrl: 'https://search.shopping.naver.com/search/all?query=30수+면+무지+원단',
+    productUrl: 'https://search.naver.com/search.naver?where=shopping&query=30%EC%88%98%20%EB%A9%B4%20%EB%AC%B4%EC%A7%80%20%EC%9B%90%EB%8B%A8',
     note: '배송비 무료 조건 스토어 예시 (소량 1~2마 살 때 유리)',
     createdAt: '2026-11-24T09:30:00.000Z',
   },
@@ -241,4 +241,91 @@ export function buildMallSearchUrl(mall: FabricMallInfo, query: string): string 
   const trimmed = query.trim();
   if (!trimmed) return mall.url;
   return mall.searchUrlTemplate.replace('{query}', encodeURIComponent(trimmed));
+}
+
+export function repairFabricProductUrl(rawUrl?: string): string | undefined {
+  if (!rawUrl || typeof rawUrl !== 'string') return undefined;
+  let trimmed = rawUrl.trim();
+  if (!trimmed) return undefined;
+
+  if (/^javascript:/i.test(trimmed)) return undefined;
+  if (!/^https?:\/\//i.test(trimmed)) {
+    trimmed = `https://${trimmed.replace(/^\/+/, '')}`;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    const host = parsed.hostname.toLowerCase();
+
+    // Fix broken 천가게 URL (/shop/search.php -> /shop/shopbrand.html?search=)
+    if (host.includes('1000gage.co.kr') && parsed.pathname.includes('search.php')) {
+      const q = parsed.searchParams.get('search_text') || parsed.searchParams.get('search') || '';
+      return q
+        ? `https://www.1000gage.co.kr/shop/shopbrand.html?search=${encodeURIComponent(q)}`
+        : 'https://www.1000gage.co.kr';
+    }
+
+    // Fix broken 천싸요 URL (/product/search.html -> /shop/shopbrand.html?search=)
+    if (host.includes('1004yo.com') && parsed.pathname.includes('/product/search.html')) {
+      const q = parsed.searchParams.get('keyword') || parsed.searchParams.get('search') || '';
+      return q
+        ? `https://1004yo.com/shop/shopbrand.html?search=${encodeURIComponent(q)}`
+        : 'https://1004yo.com';
+    }
+
+    // Fix broken 네스홈 URL (/shop/shopbrand.html -> /product/search.html?keyword=)
+    if (host.includes('nesshome.com') && parsed.pathname.includes('shopbrand.html')) {
+      const q = parsed.searchParams.get('search') || parsed.searchParams.get('keyword') || '';
+      return q
+        ? `https://www.nesshome.com/product/search.html?keyword=${encodeURIComponent(q)}`
+        : 'https://www.nesshome.com';
+    }
+
+    // Fix Naver Shopping redirect/418 URL -> Naver Shopping unified search
+    if (host === 'search.shopping.naver.com' || host === 'shopping.naver.com') {
+      const q = parsed.searchParams.get('query') || '';
+      return q
+        ? `https://search.naver.com/search.naver?where=shopping&query=${encodeURIComponent(q)}`
+        : 'https://search.naver.com/search.naver?where=shopping&query=%EC%9B%90%EB%8B%A8';
+    }
+
+    if (
+      parsed.protocol === 'http:' &&
+      /(doufabric\.com|1000gage\.co\.kr|1004yo\.com|3amsic\.com|nesshome\.com|naver\.com)$/i.test(
+        host
+      )
+    ) {
+      parsed.protocol = 'https:';
+    }
+
+    return parsed.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+export function resolveComparisonSiteUrl(item: {
+  productUrl?: string;
+  mallName: string;
+  fabricName: string;
+}): string {
+  const repaired = repairFabricProductUrl(item.productUrl);
+  if (repaired) return repaired;
+
+  const compactMall = item.mallName.replace(/\s+/g, '');
+  const matchedMall = KOREAN_FABRIC_MALLS.find((m) => {
+    const compactName = m.name.replace(/\s+/g, '');
+    return (
+      compactName === compactMall ||
+      compactMall.includes(compactName) ||
+      compactName.includes(compactMall)
+    );
+  });
+  const cleanQuery = item.fabricName.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
+  if (matchedMall) {
+    return buildMallSearchUrl(matchedMall, cleanQuery);
+  }
+  return `https://search.naver.com/search.naver?where=shopping&query=${encodeURIComponent(
+    `${item.mallName} ${cleanQuery} 원단`.trim()
+  )}`;
 }
