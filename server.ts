@@ -110,13 +110,33 @@ function normalizePricePerYard(price: number, unit: '1마' | '반마' | '1m' | '
   return price;
 }
 
-function sanitizeHttpUrl(url?: string): string | undefined {
+const ALLOWED_KOREAN_DOMAINS = [
+  'doufabric.com',
+  '3amsic.com',
+  '1000gage.co.kr',
+  '1004yo.com',
+  'nesshome.com',
+  'naver.com',
+  'daum.net',
+  'tistory.com',
+];
+
+function sanitizeKoreanUrl(url?: string): string | undefined {
   if (!url || typeof url !== 'string') return undefined;
   const trimmed = url.trim();
-  if (trimmed.startsWith('https://') || trimmed.startsWith('http://')) {
-    return trimmed;
+  if (!trimmed.startsWith('https://') && !trimmed.startsWith('http://')) {
+    return undefined;
   }
-  return undefined;
+  try {
+    const parsed = new URL(trimmed);
+    const host = parsed.hostname.toLowerCase();
+    const isKorean =
+      host.endsWith('.kr') ||
+      ALLOWED_KOREAN_DOMAINS.some((d) => host === d || host.endsWith(`.${d}`));
+    return isKorean ? trimmed : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function decodeHtmlEntities(input: string): string {
@@ -130,12 +150,68 @@ function decodeHtmlEntities(input: string): string {
     .trim();
 }
 
-function decodeJsonEscapes(input: string): string {
-  try {
-    return JSON.parse(`"${input}"`) as string;
-  } catch {
-    return input.replace(/\\u0026/g, '&').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+const FABRIC_PURPOSE_FALLBACKS: Array<{ pattern: RegExp; keywords: string[] }> = [
+  { pattern: /에코백|토트백|가방/, keywords: ['캔버스', '옥스포드'] },
+  { pattern: /파우치|지갑/, keywords: ['옥스포드', '선염 체크'] },
+  { pattern: /앞치마/, keywords: ['워싱 린넨', '20수 면'] },
+  { pattern: /쿠션|커버|커튼|침구/, keywords: ['린넨', '옥스포드'] },
+  { pattern: /아기|유아|턱받이|블랭킷|속싸개|배냇/, keywords: ['거즈', '이중거즈'] },
+  { pattern: /원피스|의류|블라우스|바지|치마/, keywords: ['린넨', '아사'] },
+  { pattern: /티코스터|컵받침|냄비/, keywords: ['린넨', '체크'] },
+];
+
+function buildFabricFallbackKeywords(rawQuery: string): string[] {
+  const candidates: string[] = [];
+  const cleaned = rawQuery
+    .replace(/(원단|천|소품|만들기|추천|저렴한|최저가|1마|반마)/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (cleaned && cleaned !== rawQuery) {
+    candidates.push(cleaned);
   }
+
+  for (const rule of FABRIC_PURPOSE_FALLBACKS) {
+    if (rule.pattern.test(rawQuery)) {
+      candidates.push(...rule.keywords);
+    }
+  }
+
+  const tokens = cleaned
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2 || t === '면');
+
+  if (tokens.length >= 2) {
+    // Last 2 tokens (e.g. "프렌치 워싱 린넨" -> "워싱 린넨", "아기 이중지 거즈" -> "이중지 거즈")
+    candidates.push(tokens.slice(-2).join(' '));
+  }
+
+  // Try core material tokens from right to left (e.g. "린넨", "거즈", "면")
+  for (let i = tokens.length - 1; i >= 0; i--) {
+    const token = tokens[i];
+    if (token === '면') {
+      candidates.push('면 무지');
+    } else {
+      candidates.push(token);
+    }
+  }
+
+  // Common material keywords embedded without spaces (e.g. "이중지거즈" -> "거즈")
+  const knownMaterials = ['린넨', '캔버스', '옥스포드', '거즈', '누빔', '광목', '데님', '트윌', '아사', '체크', '다이마루', '쭈리', '코듀로이', '무지'];
+  for (const mat of knownMaterials) {
+    if (rawQuery.includes(mat)) {
+      candidates.push(mat);
+    }
+  }
+
+  const seen = new Set<string>([rawQuery]);
+  return candidates.filter((kw) => {
+    const k = kw.trim();
+    if (!k || seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
 }
 
 async function fetchCafe24MallProducts(params: {
@@ -205,13 +281,13 @@ async function fetchCafe24MallProducts(params: {
   }
 }
 
-async function fetchLiveKoreanFabricStores(
-  query: string
-): Promise<{
-  candidates: SearchCandidatePayload[];
-  sources: Array<{ title: string; uri: string }>;
+async function queryMallsOnce(keyword: string): Promise<{
+  douItems: SearchCandidatePayload[];
+  samsikItems: SearchCandidatePayload[];
+  douUrl: string;
+  samsikUrl: string;
 }> {
-  const encoded = encodeURIComponent(query);
+  const encoded = encodeURIComponent(keyword);
   const douUrl = `https://doufabric.com/product/search.html?keyword=${encoded}`;
   const samsikUrl = `https://3amsic.com/product/search.html?keyword=${encoded}`;
 
@@ -233,8 +309,66 @@ async function fetchLiveKoreanFabricStores(
     }),
   ]);
 
-  // Interleave & sort cheapest normalized 1-yard price first (preferring single-yard items over 1+1 bundles at top)
-  const combined = [...douItems, ...samsikItems].sort((a, b) => {
+  return { douItems, samsikItems, douUrl, samsikUrl };
+}
+
+async function fetchLiveKoreanFabricStores(
+  query: string
+): Promise<{
+  candidates: SearchCandidatePayload[];
+  sources: Array<{ title: string; uri: string }>;
+  matchedKeyword: string;
+}> {
+  const primary = await queryMallsOnce(query);
+  let allItems = [...primary.douItems, ...primary.samsikItems];
+  const sources: Array<{ title: string; uri: string }> = [];
+  let matchedKeyword = query;
+
+  if (primary.douItems.length > 0) {
+    sources.push({ title: `도우패브릭 "${query}" 검색 결과`, uri: primary.douUrl });
+  }
+  if (primary.samsikItems.length > 0) {
+    sources.push({ title: `삼식이원단 "${query}" 검색 결과`, uri: primary.samsikUrl });
+  }
+
+  // Fallback to simplified Korean fabric keywords if exact phrase returned too few results
+  if (allItems.length < 3) {
+    const fallbacks = buildFabricFallbackKeywords(query).slice(0, 3);
+    for (const fb of fallbacks) {
+      const res = await queryMallsOnce(fb);
+      const fbItems = [...res.douItems, ...res.samsikItems];
+      if (fbItems.length > 0) {
+        if (allItems.length === 0) {
+          matchedKeyword = fb;
+        }
+        allItems = [...allItems, ...fbItems];
+        if (res.douItems.length > 0) {
+          sources.push({ title: `도우패브릭 "${fb}" 검색 결과`, uri: res.douUrl });
+        }
+        if (res.samsikItems.length > 0) {
+          sources.push({ title: `삼식이원단 "${fb}" 검색 결과`, uri: res.samsikUrl });
+        }
+        if (allItems.length >= 6) break;
+      }
+    }
+  }
+
+  // Always include Naver Shopping & Korean mall quick links (zero foreign URLs)
+  sources.push({
+    title: `네이버쇼핑 "${query}" 원단 가격비교`,
+    uri: `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(`${query} 원단`)}`,
+  });
+
+  // Deduplicate & sort cheapest normalized 1-yard price first
+  const seen = new Set<string>();
+  const deduped = allItems.filter((item) => {
+    const k = `${item.mallName}:${item.productTitle}`.toLowerCase();
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+
+  deduped.sort((a, b) => {
     const aIsPack = /1\+1|묶음|세트/i.test(a.productTitle) ? 1 : 0;
     const bIsPack = /1\+1|묶음|세트/i.test(b.productTitle) ? 1 : 0;
     if (aIsPack !== bIsPack) return aIsPack - bIsPack;
@@ -244,17 +378,10 @@ async function fetchLiveKoreanFabricStores(
     );
   });
 
-  const sources: Array<{ title: string; uri: string }> = [];
-  if (douItems.length > 0) {
-    sources.push({ title: `도우패브릭 "${query}" 실시간 검색 결과`, uri: douUrl });
-  }
-  if (samsikItems.length > 0) {
-    sources.push({ title: `삼식이원단 "${query}" 실시간 검색 결과`, uri: samsikUrl });
-  }
-
   return {
-    candidates: combined.slice(0, 8),
-    sources,
+    candidates: deduped.slice(0, 8),
+    sources: sources.slice(0, 6),
+    matchedKeyword,
   };
 }
 
@@ -273,7 +400,7 @@ async function fetchGeminiGroundedSearch(
 
   const systemInstruction = [
     '당신은 한국의 홈 미싱·소잉·원단 구매 도우미입니다.',
-    'Google Search로 한국 원단 쇼핑몰(천가게, 천싸요, 도우패브릭, 삼식이원단, 네스홈, 네이버 쇼핑)의 시세와 판매 정보를 정리하세요.',
+    '한국 원단 쇼핑몰(도우패브릭, 천가게, 천싸요, 삼식이원단, 네스홈, 네이버 쇼핑)의 시세와 판매 정보만 정리하세요. 해외 사이트는 제외하세요.',
     '반드시 아래 JSON 형식만 출력하세요:',
     '{',
     '  "marketSummary": "이 원단의 온라인 시세와 특징 요약 (2문장 이내)",',
@@ -288,7 +415,7 @@ async function fetchGeminiGroundedSearch(
     '      "shippingFee": 3000,',
     '      "freeShippingThreshold": 50000,',
     '      "note": "특징 메모",',
-    '      "url": "URL"',
+    '      "url": "한국 쇼핑몰 URL"',
     '    }',
     '  ]',
     '}',
@@ -315,7 +442,7 @@ async function fetchGeminiGroundedSearch(
       const sources: Array<{ title: string; uri: string }> = [];
 
       for (const chunk of rawChunks) {
-        const uri = sanitizeHttpUrl(chunk.web?.uri);
+        const uri = sanitizeKoreanUrl(chunk.web?.uri);
         if (!uri || seenUrls.has(uri)) continue;
         seenUrls.add(uri);
         sources.push({
@@ -345,7 +472,7 @@ async function fetchGeminiGroundedSearch(
                 Math.round(Number(item.freeShippingThreshold) || 50000)
               ),
               note: typeof item.note === 'string' ? item.note.trim() : '',
-              url: sanitizeHttpUrl(item.url),
+              url: sanitizeKoreanUrl(item.url),
             }))
             .filter((item) => item.estimatedPricePerYard > 0)
         : [];
@@ -365,12 +492,68 @@ async function fetchGeminiGroundedSearch(
   return null;
 }
 
-async function searchYouTubeSewingTutorials(rawQuery: string): Promise<YouTubeVideoItem[]> {
-  const hasSewingKeyword = /재봉틀|미싱|소잉|sewing|diy|만들기/i.test(rawQuery);
-  const searchQuery = hasSewingKeyword
-    ? rawQuery
-    : `재봉틀 ${rawQuery} 만들기`;
+function extractVideosFromYtData(root: unknown): YouTubeVideoItem[] {
+  const videos: YouTubeVideoItem[] = [];
+  const seenIds = new Set<string>();
 
+  function walk(node: unknown) {
+    if (!node || typeof node !== 'object' || videos.length >= 8) return;
+
+    const obj = node as Record<string, unknown>;
+    const vr = obj.videoRenderer as Record<string, unknown> | undefined;
+    if (vr && typeof vr.videoId === 'string' && /^[a-zA-Z0-9_-]{11}$/.test(vr.videoId)) {
+      if (!seenIds.has(vr.videoId)) {
+        const titleObj = vr.title as
+          | { runs?: Array<{ text?: string }>; simpleText?: string }
+          | undefined;
+        const title =
+          titleObj?.runs?.map((r) => r.text ?? '').join('').trim() ||
+          titleObj?.simpleText?.trim() ||
+          '';
+
+        if (title) {
+          seenIds.add(vr.videoId);
+          const longByline = vr.longBylineText as
+            | { runs?: Array<{ text?: string }> }
+            | undefined;
+          const ownerText = vr.ownerText as
+            | { runs?: Array<{ text?: string }> }
+            | undefined;
+          const channel =
+            longByline?.runs?.[0]?.text?.trim() ||
+            ownerText?.runs?.[0]?.text?.trim() ||
+            '유튜브 크리에이터';
+
+          const lengthText = (vr.lengthText as { simpleText?: string } | undefined)?.simpleText;
+          const viewCountText = (vr.viewCountText as { simpleText?: string } | undefined)
+            ?.simpleText;
+
+          videos.push({
+            videoId: vr.videoId,
+            title,
+            channel,
+            lengthText,
+            viewCountText,
+            thumbnailUrl: `https://i.ytimg.com/vi/${vr.videoId}/mqdefault.jpg`,
+            watchUrl: `https://www.youtube.com/watch?v=${vr.videoId}`,
+          });
+        }
+      }
+      return;
+    }
+
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item);
+    } else {
+      for (const value of Object.values(obj)) walk(value);
+    }
+  }
+
+  walk(root);
+  return videos;
+}
+
+async function fetchYouTubeVideosOnce(searchQuery: string): Promise<YouTubeVideoItem[]> {
   const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(searchQuery)}`;
   const res = await fetch(url, {
     headers: {
@@ -385,44 +568,96 @@ async function searchYouTubeSewingTutorials(rawQuery: string): Promise<YouTubeVi
   }
 
   const html = await res.text();
-  const chunks = html.split('"videoRenderer":{').slice(1, 20);
-  const seenIds = new Set<string>();
-  const videos: YouTubeVideoItem[] = [];
 
-  for (const chunk of chunks) {
-    const videoId = chunk.match(/^"videoId":"([a-zA-Z0-9_-]{11})"/)?.[1];
-    if (!videoId || seenIds.has(videoId)) continue;
-
-    const rawTitle = chunk.match(/"title":\{"runs":\[\{"text":"((?:\\.|[^"\\])*)"/)?.[1];
-    if (!rawTitle) continue;
-
-    const rawChannel =
-      chunk.match(/"longBylineText":\{"runs":\[\{"text":"((?:\\.|[^"\\])*)"/)?.[1] ||
-      chunk.match(/"ownerText":\{"runs":\[\{"text":"((?:\\.|[^"\\])*)"/)?.[1] ||
-      '유튜브 크리에이터';
-
-    const lengthText = chunk.match(
-      /"lengthText":\{[^}]*"simpleText":"([^"]+)"/
-    )?.[1];
-    const viewCountText = chunk.match(
-      /"viewCountText":\{"simpleText":"([^"]+)"/
-    )?.[1];
-
-    seenIds.add(videoId);
-    videos.push({
-      videoId,
-      title: decodeJsonEscapes(rawTitle),
-      channel: decodeJsonEscapes(rawChannel),
-      lengthText,
-      viewCountText,
-      thumbnailUrl: `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`,
-      watchUrl: `https://www.youtube.com/watch?v=${videoId}`,
-    });
-
-    if (videos.length >= 8) break;
+  // Primary: parse ytInitialData JSON reliably regardless of key ordering
+  const jsonMatch = html.match(/var ytInitialData = (\{[\s\S]*?\});<\/script>/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[1]) as unknown;
+      const fromData = extractVideosFromYtData(parsed);
+      if (fromData.length > 0) return fromData;
+    } catch {
+      // Fallback to youtubei/v1/search below
+    }
   }
 
-  return videos;
+  // Secondary: YouTube internal search API (works cleanly without HTML shell scraping)
+  const apiKey = html.match(/"INNERTUBE_API_KEY":"([^"]+)"/)?.[1];
+  if (apiKey) {
+    try {
+      const apiRes = await fetch(
+        `https://www.youtube.com/youtubei/v1/search?key=${encodeURIComponent(apiKey)}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': BROWSER_UA,
+          },
+          body: JSON.stringify({
+            context: {
+              client: {
+                clientName: 'WEB',
+                clientVersion: '2.20250101.00.00',
+                hl: 'ko',
+                gl: 'KR',
+              },
+            },
+            query: searchQuery,
+          }),
+          signal: AbortSignal.timeout(5000),
+        }
+      );
+      if (apiRes.ok) {
+        const apiJson = (await apiRes.json()) as unknown;
+        const fromApi = extractVideosFromYtData(apiJson);
+        if (fromApi.length > 0) return fromApi;
+      }
+    } catch {
+      // Return empty if both fail
+    }
+  }
+
+  return [];
+}
+
+async function searchYouTubeSewingTutorials(rawQuery: string): Promise<{
+  videos: YouTubeVideoItem[];
+  usedQuery: string;
+}> {
+  const hasSewingKeyword = /재봉틀|미싱|소잉|sewing|diy|만들기/i.test(rawQuery);
+  const primaryQuery = hasSewingKeyword ? rawQuery : `재봉틀 ${rawQuery} 만들기`;
+
+  const firstAttempt = await fetchYouTubeVideosOnce(primaryQuery);
+  if (firstAttempt.length > 0) {
+    return { videos: firstAttempt, usedQuery: primaryQuery };
+  }
+
+  // Simplify overly specific multi-word queries (e.g. "재봉틀 에코백 만들기 안감 바닥다트" -> "재봉틀 에코백 만들기")
+  const coreTokens = rawQuery
+    .replace(/(재봉틀|미싱|소잉|만들기|도안|기초|무료|안감|바닥다트|원피스형|자투리|원단)/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (coreTokens.length > 0) {
+    const simplified = `재봉틀 ${coreTokens.slice(0, 2).join(' ')} 만들기`;
+    if (simplified !== primaryQuery) {
+      const secondAttempt = await fetchYouTubeVideosOnce(simplified);
+      if (secondAttempt.length > 0) {
+        return { videos: secondAttempt, usedQuery: simplified };
+      }
+    }
+
+    if (coreTokens.length > 1) {
+      const shortest = `재봉틀 ${coreTokens[0]} 만들기`;
+      const thirdAttempt = await fetchYouTubeVideosOnce(shortest);
+      if (thirdAttempt.length > 0) {
+        return { videos: thirdAttempt, usedQuery: shortest };
+      }
+    }
+  }
+
+  return { videos: [], usedQuery: primaryQuery };
 }
 
 async function startServer() {
@@ -495,9 +730,16 @@ async function startServer() {
             : `1마 ${minPrice.toLocaleString('ko-KR')}원 ~ ${maxPrice.toLocaleString('ko-KR')}원`
           : '쇼핑몰별 옵션 확인';
 
+      const keywordNote =
+        liveStoreData.matchedKeyword !== rawQuery
+          ? ` (핵심 키워드 "${liveStoreData.matchedKeyword}" 기준 검색)`
+          : '';
+
       const marketSummary =
         geminiData?.marketSummary ||
-        `국내 원단 쇼핑몰에서 "${rawQuery}" 실시간 판매 상품을 ${mergedCandidates.length}건 찾았습니다. 배송비와 1마·반마 단위를 확인해 비교표에 담아보세요.`;
+        (mergedCandidates.length > 0
+          ? `국내 원단 쇼핑몰에서 "${rawQuery}"${keywordNote} 실시간 판매 상품 ${mergedCandidates.length}건을 찾았습니다. 배송비와 1마·반마 단위를 확인해 비교표에 담아보세요.`
+          : `"${rawQuery}"와 정확히 일치하는 실시간 상품이 적어 아래 국내 원단 쇼핑몰 바로검색 링크를 준비했습니다.`);
 
       const priceRangeText = geminiData?.priceRangeText || computedPriceRange;
 
@@ -511,7 +753,7 @@ async function startServer() {
         priceRangeText,
         shoppingTip,
         candidates: mergedCandidates.slice(0, 8),
-        sources: mergedSources.slice(0, 8),
+        sources: mergedSources.slice(0, 6),
       });
     } catch {
       res.status(502).json({
@@ -534,12 +776,13 @@ async function startServer() {
       return;
     }
 
-    const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(
+    const fallbackSearchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(
       /재봉틀|미싱|만들기/i.test(rawQuery) ? rawQuery : `재봉틀 ${rawQuery} 만들기`
     )}`;
 
     try {
-      const videos = await searchYouTubeSewingTutorials(rawQuery);
+      const { videos, usedQuery } = await searchYouTubeSewingTutorials(rawQuery);
+      const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(usedQuery)}`;
       res.json({
         query: rawQuery,
         searchUrl,
@@ -548,7 +791,7 @@ async function startServer() {
     } catch {
       res.status(502).json({
         error: '유튜브 추천 영상을 불러오는 중 일시적인 오류가 발생했습니다.',
-        searchUrl,
+        searchUrl: fallbackSearchUrl,
       });
     }
   });

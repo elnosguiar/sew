@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ExternalLink, Loader2, Play, RotateCcw, Search, Youtube } from 'lucide-react';
 import { YouTubeSearchResponse, YouTubeVideoItem } from '../types/atelier';
 
@@ -25,11 +25,13 @@ export function YouTubeRecommendationPanel({
   const [videos, setVideos] = useState<YouTubeVideoItem[]>([]);
   const [searchUrl, setSearchUrl] = useState('');
   const [activeQuery, setActiveQuery] = useState('');
+  const requestIdRef = useRef(0);
 
   const fetchVideos = useCallback(async (targetQuery: string) => {
     const trimmed = targetQuery.trim();
     if (!trimmed) return;
 
+    const reqId = ++requestIdRef.current;
     setStatus('loading');
     setErrorMsg('');
     setActiveQuery(trimmed);
@@ -41,6 +43,7 @@ export function YouTubeRecommendationPanel({
         body: JSON.stringify({ query: trimmed }),
       });
       const data = (await res.json()) as YouTubeSearchResponse & { error?: string };
+      if (reqId !== requestIdRef.current) return;
       if (!res.ok) {
         setStatus('error');
         setSearchUrl(
@@ -57,6 +60,7 @@ export function YouTubeRecommendationPanel({
       setSearchUrl(data.searchUrl);
       setStatus('success');
     } catch {
+      if (reqId !== requestIdRef.current) return;
       setStatus('error');
       setSearchUrl(
         `https://www.youtube.com/results?search_query=${encodeURIComponent(

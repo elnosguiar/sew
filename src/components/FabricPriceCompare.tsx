@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Calculator,
   Check,
@@ -100,6 +100,7 @@ export function FabricPriceCompare({
   const [searchError, setSearchError] = useState('');
   const [searchResult, setSearchResult] = useState<FabricSearchResponse | null>(null);
   const [addedCandidateKeys, setAddedCandidateKeys] = useState<Record<string, boolean>>({});
+  const searchRequestIdRef = useRef(0);
 
   // Mall Directory filter
   const [selectedMallCategory, setSelectedMallCategory] = useState<'전체' | FabricMallCategory>('전체');
@@ -141,36 +142,50 @@ export function FabricPriceCompare({
     });
   };
 
-  const runLiveSearch = async (overrideQuery?: string) => {
-    const query = (overrideQuery ?? searchKeyword).trim();
-    if (!query) return;
-    if (overrideQuery) {
-      setSearchKeyword(overrideQuery);
-    }
-
-    setSearchStatus('loading');
-    setSearchError('');
-
-    try {
-      const res = await fetch('/api/fabric-search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, neededYards }),
-      });
-      const data = (await res.json()) as FabricSearchResponse & { error?: string };
-      if (!res.ok) {
-        setSearchStatus('error');
-        setSearchError(data.error || '실시간 원단 검색 중 오류가 발생했습니다.');
-        return;
+  const runLiveSearch = useCallback(
+    async (overrideQuery?: string) => {
+      const query = (overrideQuery ?? searchKeyword).trim();
+      if (!query) return;
+      if (overrideQuery) {
+        setSearchKeyword(overrideQuery);
       }
-      setSearchResult(data);
-      setAddedCandidateKeys({});
-      setSearchStatus('success');
-    } catch {
-      setSearchStatus('error');
-      setSearchError('서버와 연결하지 못했습니다. 잠시 후 다시 시도하거나 아래 쇼핑몰 바로검색을 이용해 주세요.');
-    }
-  };
+
+      const reqId = ++searchRequestIdRef.current;
+      setSearchStatus('loading');
+      setSearchError('');
+
+      try {
+        const res = await fetch('/api/fabric-search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query, neededYards }),
+        });
+        const data = (await res.json()) as FabricSearchResponse & { error?: string };
+        if (reqId !== searchRequestIdRef.current) return;
+        if (!res.ok) {
+          setSearchStatus('error');
+          setSearchError(data.error || '실시간 원단 검색 중 오류가 발생했습니다.');
+          return;
+        }
+        setSearchResult(data);
+        setAddedCandidateKeys({});
+        setSearchStatus('success');
+      } catch {
+        if (reqId !== searchRequestIdRef.current) return;
+        setSearchStatus('error');
+        setSearchError(
+          '서버와 연결하지 못했습니다. 잠시 후 다시 시도하거나 아래 쇼핑몰 바로검색을 이용해 주세요.'
+        );
+      }
+    },
+    [neededYards, searchKeyword]
+  );
+
+  useEffect(() => {
+    void runLiveSearch('30수 무지 면');
+    // Run initial live market lookup once when entering the comparison view
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleAddCandidateToCompare = (candidate: FabricSearchCandidate, index: number) => {
     onSaveComparison({

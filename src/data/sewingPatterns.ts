@@ -44,7 +44,7 @@ export interface SewingPatternGuide {
 export interface FreePatternSource {
   id: string;
   name: string;
-  language: '한국어' | '영문(무료 PDF)';
+  language: '한국어';
   description: string;
   url: string;
   bestFor: string;
@@ -62,7 +62,7 @@ export const SEWING_PATTERNS: SewingPatternGuide[] = [
     recommendedFabric: '10수 바이오 캔버스, 옥스포드, 데님 10oz',
     machineSpec: '14호 바늘 · 코아사 40수 · 땀수 3.0mm',
     shapeType: 'ecobag',
-    youtubeQuery: '재봉틀 에코백 만들기 안감 바닥다트',
+    youtubeQuery: '재봉틀 에코백 만들기',
     primaryCutSpec: { widthCm: 36, heightCm: 42, pieces: 2, seamCm: 1.5 },
     parts: [
       { name: '가방 본판 (앞/뒤)', widthCm: 36, heightCm: 42, quantity: 2, seamCm: 1.5, note: '하단 양 모서리 4×4cm 다트' },
@@ -90,7 +90,7 @@ export const SEWING_PATTERNS: SewingPatternGuide[] = [
     recommendedFabric: '선염 체크 면 40수, 옥스포드, 워싱 린넨',
     machineSpec: '11호 바늘 · 지퍼 노루발 · 땀수 2.5mm',
     shapeType: 'pouch',
-    youtubeQuery: '재봉틀 사각 지퍼 파우치 만들기 기초',
+    youtubeQuery: '재봉틀 지퍼 파우치 만들기',
     primaryCutSpec: { widthCm: 22, heightCm: 16, pieces: 2, seamCm: 1 },
     parts: [
       { name: '겉감 (앞/뒤)', widthCm: 22, heightCm: 16, quantity: 2, seamCm: 1 },
@@ -118,7 +118,7 @@ export const SEWING_PATTERNS: SewingPatternGuide[] = [
     recommendedFabric: '프렌치 워싱 린넨, 면 20수 바이오 워싱',
     machineSpec: '11호 바늘 · 코아사 60수 · 땀수 2.8mm',
     shapeType: 'apron',
-    youtubeQuery: '재봉틀 린넨 앞치마 만들기 원피스형',
+    youtubeQuery: '재봉틀 린넨 앞치마 만들기',
     primaryCutSpec: { widthCm: 95, heightCm: 88, pieces: 1, seamCm: 2 },
     parts: [
       { name: '앞치마 몸판', widthCm: 95, heightCm: 88, quantity: 1, seamCm: 2, note: '상단 가슴폭 26cm로 사선 재단' },
@@ -146,7 +146,7 @@ export const SEWING_PATTERNS: SewingPatternGuide[] = [
     recommendedFabric: '깅엄 체크 면, 30수 면 무지, 얇은 린넨',
     machineSpec: '11호 바늘 · 코아사 60수 · 땀수 2.5mm',
     shapeType: 'drawstring',
-    youtubeQuery: '재봉틀 스트링 파우치 조리개 주머니 만들기',
+    youtubeQuery: '재봉틀 스트링 파우치 만들기',
     primaryCutSpec: { widthCm: 24, heightCm: 30, pieces: 2, seamCm: 1 },
     parts: [
       { name: '겉감 (앞/뒤)', widthCm: 24, heightCm: 30, quantity: 2, seamCm: 1, note: '위에서 4~6cm 구간 끈 구멍 비움' },
@@ -173,7 +173,7 @@ export const SEWING_PATTERNS: SewingPatternGuide[] = [
     recommendedFabric: '다이아 누빔, 방수 라미네이팅, 10수 캔버스',
     machineSpec: '14호 바늘 · 코아사 40수 · 땀수 2.8mm',
     shapeType: 'bottle',
-    youtubeQuery: '재봉틀 텀블러 가방 보틀 파우치 만들기',
+    youtubeQuery: '재봉틀 텀블러 파우치 만들기',
     primaryCutSpec: { widthCm: 28, heightCm: 24, pieces: 1, seamCm: 1 },
     parts: [
       { name: '원통 몸판 (겉/안)', widthCm: 28, heightCm: 24, quantity: 2, seamCm: 1 },
@@ -200,7 +200,7 @@ export const SEWING_PATTERNS: SewingPatternGuide[] = [
     recommendedFabric: '워싱 린넨, 옥스포드, 광목 20수',
     machineSpec: '11호 바늘 · 코아사 60수 · 땀수 2.8mm',
     shapeType: 'cushion',
-    youtubeQuery: '재봉틀 지퍼없는 호텔식 쿠션커버 만들기',
+    youtubeQuery: '재봉틀 쿠션커버 만들기',
     primaryCutSpec: { widthCm: 50, heightCm: 50, pieces: 2, seamCm: 1.5 },
     parts: [
       { name: '앞판', widthCm: 50, heightCm: 50, quantity: 1, seamCm: 1.5 },
@@ -227,7 +227,7 @@ export const SEWING_PATTERNS: SewingPatternGuide[] = [
     recommendedFabric: '남은 체크 면, 린넨 자투리',
     machineSpec: '11호 바늘 · 코아사 60수 · 땀수 2.5mm',
     shapeType: 'coaster',
-    youtubeQuery: '재봉틀 티코스터 컵받침 자투리 원단 만들기',
+    youtubeQuery: '재봉틀 티코스터 만들기',
     primaryCutSpec: { widthCm: 11, heightCm: 11, pieces: 8, seamCm: 0.7 },
     parts: [
       { name: '겉감', widthCm: 11, heightCm: 11, quantity: 4, seamCm: 0.7 },
@@ -254,7 +254,7 @@ export const SEWING_PATTERNS: SewingPatternGuide[] = [
     recommendedFabric: '오가닉 이중거즈, 밤부 거즈, 60수 면',
     machineSpec: '9호~11호 바늘 · 면사 60수 · 땀수 2.4mm',
     shapeType: 'bib',
-    youtubeQuery: '재봉틀 아기 반다나 턱받이 스카프빕 만들기 도안',
+    youtubeQuery: '재봉틀 아기 턱받이 만들기',
     primaryCutSpec: { widthCm: 34, heightCm: 22, pieces: 2, seamCm: 1 },
     parts: [
       { name: '앞판 (거즈/면)', widthCm: 34, heightCm: 22, quantity: 1, seamCm: 1, note: '상단 목선 완만한 곡선' },
@@ -274,42 +274,34 @@ export const SEWING_PATTERNS: SewingPatternGuide[] = [
 export const FREE_PATTERN_SOURCES: FreePatternSource[] = [
   {
     id: 'naver-free-pdf',
-    name: '네이버 블로그 · 카페 무료 소잉 도안 검색',
+    name: '네이버 블로그 · 무료 재봉틀 도안 PDF',
     language: '한국어',
-    description: '국내 핸드메이더들이 공유하는 에코백, 파우치, 앞치마, 아기옷 A4 무료 PDF 도안을 검색할 수 있습니다.',
+    description: '국내 핸드메이더들이 공유하는 에코백, 파우치, 앞치마, 아기옷 A4 무료 PDF 도안을 바로 찾을 수 있습니다.',
     url: 'https://search.naver.com/search.naver?where=blog&query=재봉틀+소품+무료+도안+PDF',
     bestFor: '한국어 설명 + A4 프린트 도안',
   },
   {
-    id: 'youtube-free-pattern',
-    name: '유튜브 "무료도안 포함" 소잉 영상 모음',
+    id: 'naver-cafe-pattern',
+    name: '네이버 카페 · 핸드메이드 무료 패턴 공유',
     language: '한국어',
-    description: '영상 더보기란에 실물 PDF 도안 다운로드 링크를 함께 제공하는 국내 소잉 유튜버 영상 검색 결과입니다.',
+    description: '국내 미싱·홈패션 카페 회원들이 직접 올린 소품 치수표와 무료 실물 도안 게시글을 모아 볼 수 있습니다.',
+    url: 'https://search.naver.com/search.naver?where=article&query=재봉틀+무료+도안+PDF',
+    bestFor: '가방 · 파우치 · 앞치마 실물 도안',
+  },
+  {
+    id: 'youtube-free-pattern',
+    name: '유튜브 · 무료도안 포함 소잉 영상 모음',
+    language: '한국어',
+    description: '영상 더보기란에 A4 무료 PDF 도안 링크를 함께 제공하는 국내 소잉 유튜버 영상을 모아 검색합니다.',
     url: 'https://www.youtube.com/results?search_query=재봉틀+소품+만들기+무료도안+PDF',
     bestFor: '영상 따라하기 + 무료 PDF 도안',
   },
   {
-    id: 'pinterest-pattern',
-    name: '핀터레스트 무료 패턴 도안 보드',
+    id: 'naver-pouch-ecobag',
+    name: '네이버 · 에코백·파우치 재단 치수표 모음',
     language: '한국어',
-    description: '치수가 적힌 파우치·가방·의류 전개도 이미지와 무료 PDF 도안 링크가 가장 많이 모여 있습니다.',
-    url: 'https://www.pinterest.com/search/pins/?q=sewing+bag+pouch+free+pattern+pdf',
-    bestFor: '시각적 전개도 · 다양한 디자인 참고',
-  },
-  {
-    id: 'sewcanshe',
-    name: 'Sew Can She 무료 가방·파우치 도안',
-    language: '영문(무료 PDF)',
-    description: '수백 가지 지퍼 파우치, 토트백, 정리함 무료 패턴과 단계별 사진 설명을 제공하는 유명 해외 소잉 사이트입니다.',
-    url: 'https://www.sewcanshe.com/free-patterns',
-    bestFor: '파우치 · 토트백 · 퀼트 소품 (브라우저 번역 추천)',
-  },
-  {
-    id: 'soseweasy',
-    name: 'So Sew Easy 무료 패턴 아카이브',
-    language: '영문(무료 PDF)',
-    description: '가방부터 앞치마, 생활 소품, 간편 의류까지 무료 PDF 다운로드 도안이 체계적으로 정리되어 있습니다.',
-    url: 'https://so-sew-easy.com/free-sewing-patterns/',
-    bestFor: '앞치마 · 데일리 가방 · 여성 의류',
+    description: '별도 프린트 없이 자로 바로 그려 재단할 수 있는 사각 파우치, 다트 에코백, 쿠션 치수 도안 검색 결과입니다.',
+    url: 'https://search.naver.com/search.naver?where=blog&query=에코백+파우치+재단+도안+치수',
+    bestFor: '프린트 없이 바로 재단하는 치수표',
   },
 ];
