@@ -7,6 +7,7 @@ import {
   Download,
   Layers,
   Plus,
+  Scale,
   Upload,
   Wrench,
 } from 'lucide-react';
@@ -361,7 +362,16 @@ export function HomeDashboard({
       </div>
 
       {/* One-Handed Quick Action Shortcuts (Thumb Zone) */}
-      <section aria-label="빠른 실행" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <section aria-label="빠른 실행" className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <button
+          type="button"
+          onClick={() => onNavigate('compare')}
+          className="col-span-2 flex min-h-[52px] cursor-pointer items-center justify-center gap-2 rounded-2xl border border-[#2B4157]/30 bg-white px-4 py-3 text-sm font-semibold text-[#2B4157] transition-colors hover:border-[#2B4157] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#2B4157] sm:col-span-1"
+        >
+          <Scale className="h-4 w-4 text-[#2B4157]" aria-hidden="true" />
+          <span className="whitespace-nowrap">원단 가격비교</span>
+        </button>
+
         <button
           type="button"
           onClick={onQuickAddFabric}

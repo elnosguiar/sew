@@ -1,11 +1,19 @@
 import { useEffect, useState } from 'react';
 import { AtelierHeader } from './components/AtelierHeader';
 import { BottomTabBar } from './components/BottomTabBar';
-import { CostCalculator } from './components/CostCalculator';
-import { FabricManager } from './components/FabricManager';
+import { CostCalculator, CostDraftPreset } from './components/CostCalculator';
+import { FabricDraftPreset, FabricManager } from './components/FabricManager';
+import {
+  ComparisonDraftPreset,
+  FabricPriceCompare,
+} from './components/FabricPriceCompare';
 import { HomeDashboard } from './components/HomeDashboard';
 import { ProjectDraftPreset, ProjectManager } from './components/ProjectManager';
 import { SewingToolbox } from './components/SewingToolbox';
+import {
+  ComparisonCalculation,
+  INITIAL_FABRIC_COMPARISONS,
+} from './data/fabricMalls';
 import {
   INITIAL_COST_RECORDS,
   INITIAL_FABRICS,
@@ -15,6 +23,7 @@ import {
 import {
   AtelierBackupPayload,
   CostRecord,
+  FabricComparisonItem,
   FabricItem,
   ProjectItem,
   TabId,
@@ -25,6 +34,7 @@ const STORAGE_KEYS = {
   fabrics: 'sewing_atelier_fabrics_v1',
   projects: 'sewing_atelier_projects_v1',
   costs: 'sewing_atelier_costs_v1',
+  comparisons: 'sewing_atelier_comparisons_v1',
 };
 
 function loadFromStorage<T>(key: string, fallback: T): T {
@@ -49,15 +59,29 @@ export default function App() {
   const [costRecords, setCostRecords] = useState<CostRecord[]>(() =>
     loadFromStorage(STORAGE_KEYS.costs, INITIAL_COST_RECORDS)
   );
+  const [comparisons, setComparisons] = useState<FabricComparisonItem[]>(() =>
+    loadFromStorage(STORAGE_KEYS.comparisons, INITIAL_FABRIC_COMPARISONS)
+  );
 
-  // Sheet states managed here so header/home/toolbox quick actions can open them seamlessly
+  // Sheet states managed here so header/home/toolbox/compare quick actions can open them seamlessly
   const [isFabricSheetOpen, setIsFabricSheetOpen] = useState(false);
   const [editingFabric, setEditingFabric] = useState<FabricItem | null>(null);
+  const [fabricDraftPreset, setFabricDraftPreset] =
+    useState<FabricDraftPreset | null>(null);
 
   const [isProjectSheetOpen, setIsProjectSheetOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<ProjectItem | null>(null);
   const [projectDraftPreset, setProjectDraftPreset] =
     useState<ProjectDraftPreset | null>(null);
+
+  const [isCompareSheetOpen, setIsCompareSheetOpen] = useState(false);
+  const [editingComparison, setEditingComparison] =
+    useState<FabricComparisonItem | null>(null);
+  const [compareDraftPreset, setCompareDraftPreset] =
+    useState<ComparisonDraftPreset | null>(null);
+
+  const [costDraftPreset, setCostDraftPreset] =
+    useState<CostDraftPreset | null>(null);
 
   useEffect(() => {
     try {
@@ -82,6 +106,17 @@ export default function App() {
       // Ignore quota exceeded gracefully
     }
   }, [costRecords]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        STORAGE_KEYS.comparisons,
+        JSON.stringify(comparisons)
+      );
+    } catch {
+      // Ignore quota exceeded gracefully
+    }
+  }, [comparisons]);
 
   // Fabric handlers
   const handleSaveFabric = (
@@ -206,6 +241,64 @@ export default function App() {
     setCostRecords((prev) => prev.filter((item) => item.id !== id));
   };
 
+  // Price comparison handlers
+  const handleSaveComparison = (
+    data: Omit<FabricComparisonItem, 'id' | 'createdAt'>,
+    existingId?: string
+  ) => {
+    if (existingId) {
+      setComparisons((prev) =>
+        prev.map((item) => (item.id === existingId ? { ...item, ...data } : item))
+      );
+    } else {
+      const created: FabricComparisonItem = {
+        ...data,
+        id: `cmp-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        createdAt: new Date().toISOString(),
+      };
+      setComparisons((prev) => [created, ...prev]);
+    }
+  };
+
+  const handleDeleteComparison = (id: string) => {
+    setComparisons((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const handleResetComparisonSamples = () => {
+    setComparisons(INITIAL_FABRIC_COMPARISONS);
+  };
+
+  const handleSendComparisonToInventory = (
+    item: FabricComparisonItem,
+    metrics: ComparisonCalculation,
+    neededYards: number
+  ) => {
+    setActiveTab('fabrics');
+    setEditingFabric(null);
+    setFabricDraftPreset({
+      name: item.fabricName,
+      quantity: neededYards,
+      unit: '마',
+      widthCm: item.widthCm,
+      price: metrics.effectiveTotal,
+      note: `${item.mallName} 구매${item.note ? ` · ${item.note}` : ''}`,
+    });
+    setIsFabricSheetOpen(true);
+  };
+
+  const handleSendComparisonToCalculator = (
+    item: FabricComparisonItem,
+    metrics: ComparisonCalculation,
+    neededYards: number
+  ) => {
+    setCostDraftPreset({
+      id: `${item.id}-${Date.now()}`,
+      title: `${item.fabricName} (${neededYards}마 · ${item.mallName})`,
+      fabricCost: metrics.effectiveTotal,
+    });
+    setActiveTab('calculator');
+  };
+
   // Backup Export / Import handlers
   const handleExportBackup = () => {
     const payload: AtelierBackupPayload = {
@@ -214,6 +307,7 @@ export default function App() {
       fabrics,
       projects,
       costRecords,
+      comparisons,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
       type: 'application/json',
@@ -247,9 +341,15 @@ export default function App() {
       setFabrics(parsed.fabrics);
       setProjects(parsed.projects);
       setCostRecords(parsed.costRecords);
+      if (Array.isArray(parsed.comparisons)) {
+        setComparisons(parsed.comparisons);
+      }
+      const compareText = Array.isArray(parsed.comparisons)
+        ? `, 가격비교 ${parsed.comparisons.length}건`
+        : '';
       return {
         ok: true,
-        message: `복원 완료: 원단 ${parsed.fabrics.length}종, 작업 ${parsed.projects.length}건, 원가 ${parsed.costRecords.length}건`,
+        message: `복원 완료: 원단 ${parsed.fabrics.length}종, 작업 ${parsed.projects.length}건, 원가 ${parsed.costRecords.length}건${compareText}`,
       };
     } catch {
       return {
@@ -263,6 +363,7 @@ export default function App() {
   const openCreateFabric = () => {
     setActiveTab('fabrics');
     setEditingFabric(null);
+    setFabricDraftPreset(null);
     setIsFabricSheetOpen(true);
   };
 
@@ -273,8 +374,17 @@ export default function App() {
     setIsProjectSheetOpen(true);
   };
 
+  const openCreateComparison = (preset?: ComparisonDraftPreset) => {
+    setActiveTab('compare');
+    setEditingComparison(null);
+    setCompareDraftPreset(preset ?? null);
+    setIsCompareSheetOpen(true);
+  };
+
   const handleHeaderPrimaryAction = () => {
-    if (activeTab === 'fabrics') {
+    if (activeTab === 'compare') {
+      openCreateComparison();
+    } else if (activeTab === 'fabrics') {
       openCreateFabric();
     } else {
       openCreateProject();
@@ -311,22 +421,51 @@ export default function App() {
           />
         )}
 
+        {activeTab === 'compare' && (
+          <FabricPriceCompare
+            comparisons={comparisons}
+            isSheetOpen={isCompareSheetOpen}
+            editingItem={editingComparison}
+            draftPreset={compareDraftPreset}
+            onOpenCreate={openCreateComparison}
+            onOpenEdit={(item) => {
+              setEditingComparison(item);
+              setCompareDraftPreset(null);
+              setIsCompareSheetOpen(true);
+            }}
+            onCloseSheet={() => {
+              setIsCompareSheetOpen(false);
+              setEditingComparison(null);
+              setCompareDraftPreset(null);
+            }}
+            onSaveComparison={handleSaveComparison}
+            onDeleteComparison={handleDeleteComparison}
+            onResetSamples={handleResetComparisonSamples}
+            onSendToInventory={handleSendComparisonToInventory}
+            onSendToCalculator={handleSendComparisonToCalculator}
+          />
+        )}
+
         {activeTab === 'fabrics' && (
           <FabricManager
             fabrics={fabrics}
             isSheetOpen={isFabricSheetOpen}
             editingFabric={editingFabric}
+            draftPreset={fabricDraftPreset}
             onOpenCreate={() => {
               setEditingFabric(null);
+              setFabricDraftPreset(null);
               setIsFabricSheetOpen(true);
             }}
             onOpenEdit={(fabric) => {
               setEditingFabric(fabric);
+              setFabricDraftPreset(null);
               setIsFabricSheetOpen(true);
             }}
             onCloseSheet={() => {
               setIsFabricSheetOpen(false);
               setEditingFabric(null);
+              setFabricDraftPreset(null);
             }}
             onSaveFabric={handleSaveFabric}
             onDeleteFabric={handleDeleteFabric}
@@ -374,6 +513,7 @@ export default function App() {
           <CostCalculator
             fabrics={fabrics}
             records={costRecords}
+            draftPreset={costDraftPreset}
             onSaveRecord={handleSaveCostRecord}
             onDeleteRecord={handleDeleteCostRecord}
           />

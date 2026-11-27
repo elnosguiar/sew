@@ -1,11 +1,18 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { BookmarkCheck, RotateCcw, Sparkles, Trash2 } from 'lucide-react';
 import { CostRecord, FabricItem } from '../types/atelier';
 import { formatKRW } from '../utils/formatters';
 
+export interface CostDraftPreset {
+  id: string;
+  title: string;
+  fabricCost: number;
+}
+
 interface CostCalculatorProps {
   fabrics: FabricItem[];
   records: CostRecord[];
+  draftPreset?: CostDraftPreset | null;
   onSaveRecord: (record: Omit<CostRecord, 'id' | 'createdAt'>) => void;
   onDeleteRecord: (id: string) => void;
 }
@@ -20,13 +27,22 @@ const NOTION_PRESETS = [
 export function CostCalculator({
   fabrics,
   records,
+  draftPreset,
   onSaveRecord,
   onDeleteRecord,
 }: CostCalculatorProps) {
-  const [title, setTitle] = useState('');
-  const [fabricCost, setFabricCost] = useState<string>('14000');
+  const [title, setTitle] = useState(draftPreset?.title ?? '');
+  const [fabricCost, setFabricCost] = useState<string>(
+    draftPreset ? String(draftPreset.fabricCost) : '14000'
+  );
   const [notionsCost, setNotionsCost] = useState<string>('3500');
   const [otherCost, setOtherCost] = useState<string>('1000');
+
+  useEffect(() => {
+    if (!draftPreset) return;
+    setTitle(draftPreset.title);
+    setFabricCost(String(draftPreset.fabricCost));
+  }, [draftPreset]);
 
   // Helper state to calculate fabric cost from registered fabrics
   const [showFabricHelper, setShowFabricHelper] = useState(false);

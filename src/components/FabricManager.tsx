@@ -19,10 +19,20 @@ import { compressImageFile, formatKRW, formatQuantity } from '../utils/formatter
 import { FabricThumbnail } from './FabricThumbnail';
 import { ResponsiveSheet } from './ResponsiveSheet';
 
+export interface FabricDraftPreset {
+  name?: string;
+  quantity?: number;
+  unit?: FabricUnit;
+  widthCm?: number;
+  price?: number;
+  note?: string;
+}
+
 interface FabricManagerProps {
   fabrics: FabricItem[];
   isSheetOpen: boolean;
   editingFabric: FabricItem | null;
+  draftPreset?: FabricDraftPreset | null;
   onOpenCreate: () => void;
   onOpenEdit: (fabric: FabricItem) => void;
   onCloseSheet: () => void;
@@ -38,6 +48,7 @@ export function FabricManager({
   fabrics,
   isSheetOpen,
   editingFabric,
+  draftPreset,
   onOpenCreate,
   onOpenEdit,
   onCloseSheet,
@@ -292,9 +303,18 @@ export function FabricManager({
 
       {/* Create / Edit Fabric Bottom Sheet */}
       <FabricFormSheet
-        key={editingFabric ? editingFabric.id : isSheetOpen ? 'new-open' : 'closed'}
+        key={
+          editingFabric
+            ? editingFabric.id
+            : draftPreset
+              ? `preset-${draftPreset.name}-${draftPreset.price}`
+              : isSheetOpen
+                ? 'new-open'
+                : 'closed'
+        }
         open={isSheetOpen}
         editingFabric={editingFabric}
+        draftPreset={draftPreset ?? null}
         onClose={onCloseSheet}
         onSave={onSaveFabric}
       />
@@ -305,6 +325,7 @@ export function FabricManager({
 interface FabricFormSheetProps {
   open: boolean;
   editingFabric: FabricItem | null;
+  draftPreset: FabricDraftPreset | null;
   onClose: () => void;
   onSave: (data: Omit<FabricItem, 'id' | 'createdAt'>, existingId?: string) => void;
 }
@@ -312,11 +333,12 @@ interface FabricFormSheetProps {
 function FabricFormSheet({
   open,
   editingFabric,
+  draftPreset,
   onClose,
   onSave,
 }: FabricFormSheetProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [name, setName] = useState(editingFabric?.name ?? '');
+  const [name, setName] = useState(editingFabric?.name ?? draftPreset?.name ?? '');
   const [category, setCategory] = useState<FabricCategory>(
     editingFabric?.category ?? '린넨'
   );
@@ -325,16 +347,30 @@ function FabricFormSheet({
   );
   const [colorHex, setColorHex] = useState(editingFabric?.colorHex ?? '#EDE7DB');
   const [quantity, setQuantity] = useState(
-    editingFabric ? String(editingFabric.quantity) : '2'
+    editingFabric
+      ? String(editingFabric.quantity)
+      : draftPreset?.quantity
+        ? String(draftPreset.quantity)
+        : '2'
   );
-  const [unit, setUnit] = useState<FabricUnit>(editingFabric?.unit ?? '마');
+  const [unit, setUnit] = useState<FabricUnit>(
+    editingFabric?.unit ?? draftPreset?.unit ?? '마'
+  );
   const [widthCm, setWidthCm] = useState(
-    editingFabric?.widthCm ? String(editingFabric.widthCm) : '145'
+    editingFabric?.widthCm
+      ? String(editingFabric.widthCm)
+      : draftPreset?.widthCm
+        ? String(draftPreset.widthCm)
+        : '145'
   );
   const [price, setPrice] = useState(
-    editingFabric ? String(editingFabric.price) : ''
+    editingFabric
+      ? String(editingFabric.price)
+      : draftPreset?.price
+        ? String(draftPreset.price)
+        : ''
   );
-  const [note, setNote] = useState(editingFabric?.note ?? '');
+  const [note, setNote] = useState(editingFabric?.note ?? draftPreset?.note ?? '');
   const [imageUrl, setImageUrl] = useState<string | null>(
     editingFabric?.imageUrl ?? null
   );

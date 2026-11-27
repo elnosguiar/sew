@@ -9,10 +9,11 @@ interface AtelierHeaderProps {
 
 const NAV_ITEMS: Array<{ id: TabId; label: string }> = [
   { id: 'home', label: '홈' },
-  { id: 'fabrics', label: '원단 관리' },
-  { id: 'projects', label: '작업 관리' },
-  { id: 'toolbox', label: '미싱 도구' },
-  { id: 'calculator', label: '원가 계산' },
+  { id: 'compare', label: '가격비교' },
+  { id: 'fabrics', label: '원단함' },
+  { id: 'projects', label: '작업' },
+  { id: 'toolbox', label: '도구' },
+  { id: 'calculator', label: '원가' },
 ];
 
 export function AtelierHeader({
@@ -20,7 +21,12 @@ export function AtelierHeader({
   onSelectTab,
   onPrimaryAction,
 }: AtelierHeaderProps) {
-  const actionLabel = activeTab === 'fabrics' ? '원단 등록' : '새 작업';
+  const actionLabel =
+    activeTab === 'compare'
+      ? '비교 추가'
+      : activeTab === 'fabrics'
+        ? '원단 등록'
+        : '새 작업';
 
   return (
     <header className="sticky top-0 z-30 border-b border-[#E5E1D8] bg-[#FAF9F6]/92 backdrop-blur-md">

@@ -1,4 +1,4 @@
-export type TabId = 'home' | 'fabrics' | 'projects' | 'toolbox' | 'calculator';
+export type TabId = 'home' | 'compare' | 'fabrics' | 'projects' | 'toolbox' | 'calculator';
 
 export type FabricCategory =
   | '린넨'
@@ -10,6 +10,8 @@ export type FabricCategory =
   | '기타';
 
 export type FabricUnit = '마' | 'm';
+
+export type PriceUnit = '1마' | '반마' | '1m' | '1야드';
 
 export interface FabricItem {
   id: string;
@@ -24,6 +26,68 @@ export interface FabricItem {
   note?: string;
   imageUrl: string | null;
   createdAt: string;
+}
+
+export interface FabricComparisonItem {
+  id: string;
+  fabricName: string;
+  mallName: string;
+  unit: PriceUnit;
+  unitPrice: number;
+  shippingFee: number;
+  freeShippingThreshold: number;
+  widthCm?: number;
+  productUrl?: string;
+  note?: string;
+  createdAt: string;
+}
+
+export type FabricMallCategory =
+  | '가성비 무지'
+  | '종합/부자재'
+  | '의류/트렌드'
+  | '감성 린넨/프린트'
+  | '오픈마켓/최저가';
+
+export interface FabricMallInfo {
+  id: string;
+  name: string;
+  category: FabricMallCategory;
+  url: string;
+  searchUrlTemplate: string;
+  defaultShippingFee: number;
+  freeShippingThreshold: number;
+  priceTier: '실속 최저가' | '가성비 우수' | '중저가~중가' | '디자이너/중고가';
+  highlight: string;
+  pros: string;
+  cons: string;
+  bestFor: string[];
+  shippingTip: string;
+}
+
+export interface FabricSearchCandidate {
+  mallName: string;
+  productTitle: string;
+  estimatedPricePerYard: number;
+  unit: PriceUnit;
+  shippingFee: number;
+  freeShippingThreshold: number;
+  note: string;
+  url?: string;
+}
+
+export interface FabricSearchSource {
+  title: string;
+  uri: string;
+}
+
+export interface FabricSearchResponse {
+  query: string;
+  marketSummary: string;
+  priceRangeText: string;
+  shoppingTip: string;
+  candidates: FabricSearchCandidate[];
+  sources: FabricSearchSource[];
 }
 
 export type ProjectStatus = '준비 중' | '작업 중' | '마무리' | '제작 완료';
@@ -66,4 +130,5 @@ export interface AtelierBackupPayload {
   fabrics: FabricItem[];
   projects: ProjectItem[];
   costRecords: CostRecord[];
+  comparisons?: FabricComparisonItem[];
 }

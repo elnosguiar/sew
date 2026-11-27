@@ -1,4 +1,4 @@
-import { Calculator, ClipboardList, Home, Layers, Wrench } from 'lucide-react';
+import { Calculator, ClipboardList, Home, Layers, Scale, Wrench } from 'lucide-react';
 import { TabId } from '../types/atelier';
 
 interface BottomTabBarProps {
@@ -8,6 +8,7 @@ interface BottomTabBarProps {
 
 const TABS: Array<{ id: TabId; label: string; Icon: typeof Home }> = [
   { id: 'home', label: '홈', Icon: Home },
+  { id: 'compare', label: '비교', Icon: Scale },
   { id: 'fabrics', label: '원단', Icon: Layers },
   { id: 'projects', label: '작업', Icon: ClipboardList },
   { id: 'toolbox', label: '도구', Icon: Wrench },
@@ -20,7 +21,7 @@ export function BottomTabBar({ activeTab, onSelectTab }: BottomTabBarProps) {
       aria-label="하단 메뉴"
       className="pb-safe fixed right-0 bottom-0 left-0 z-40 border-t border-[#E5E1D8] bg-[#FAF9F6]/95 backdrop-blur-md md:hidden"
     >
-      <div className="grid h-[60px] grid-cols-5 items-center px-1">
+      <div className="grid h-[60px] grid-cols-6 items-center px-1">
         {TABS.map(({ id, label, Icon }) => {
           const isActive = activeTab === id;
           return (
