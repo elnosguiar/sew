@@ -1,11 +1,21 @@
-<div align="center">
+# 우리집 미싱실 (홈 아틀리에 작업 관리)
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+재봉틀(미싱) 작업을 할 때 원단 재고, 작업 진행 단계, 바늘·실 조합, 재단 소요량, 제작 원가를 한눈에 관리할 수 있는 모바일·PC 겸용 웹앱입니다. 별도 서버나 로그인 없이 브라우저에 자동 저장되며 GitHub Pages에 바로 배포해 사용할 수 있습니다.
 
-  <h1>Built with AI Studio</h2>
+## 주요 기능
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+- **홈 대시보드**: 진행 중인 작업, 보유 원단 현황, JSON 파일 백업/복원
+- **원단 관리**: 원단 사진, 색상, 종류, 폭(110cm/145cm), 잔여 수량(`+/-` 빠른 조절), 선세탁 메모
+- **작업 관리**: 준비 중 → 작업 중 → 마무리 → 제작 완료 단계 관리, 공정 체크리스트, 원단 재고 차감 연동, 완성 사진 기록
+- **미싱 도구함**:
+  - 원단 두께별 바늘 호수 · 재봉실 · 땀수 · 노루발 매칭 가이드
+  - 마(90cm / 91.44cm) ↔ cm ↔ m ↔ inch 실시간 환산기 & 원단 폭 기준 재단 배치 계산기
+  - 윗실 끊어짐 · 밑실 뭉침 · 땀뜀 등 미싱 응급처치 체크리스트
+- **원가 계산기**: 원단·부자재·기타 비용 자동 계산 및 작업 시간 공임 기준 핸드메이드 적정 가치 참고
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+## GitHub Pages 업로드 방법
 
-</div>
+1. 이 저장소의 전체 코드를 본인의 GitHub 저장소(`main` 브랜치)에 업로드합니다.
+2. GitHub 저장소 상단 **Settings → Pages**로 이동합니다.
+3. **Build and deployment → Source**를 **GitHub Actions**로 선택합니다.
+4. `main` 브랜치에 push되면 `.github/workflows/deploy.yml`이 자동으로 빌드 및 배포를 완료합니다.

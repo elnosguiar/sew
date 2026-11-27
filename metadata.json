@@ -1,0 +1,8 @@
+{
+  "name": "우리집 미싱실",
+  "description": "원단 재고, 미싱 작업 진행 상황, 제작 원가를 한눈에 관리하는 따뜻한 공방 스타일 모바일 작업 관리 웹앱",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
